@@ -1,0 +1,4 @@
+customtkinter
+tkinterweb
+tkinterweb-tkhtml-extras
+pyperclip
