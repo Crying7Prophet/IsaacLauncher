@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import threading
 import re
+from tkinter import filedialog
 
 # === CONFIGURACIÓN ===
 def cargar_config():
@@ -14,6 +15,7 @@ def cargar_config():
     config_default = {
         "steamcmd_path": "D:/steamcmd/steamcmd.exe",
         "isaac_mods_path": ruta_mods_default,
+        "isaac_exe_path": "",
         "temp_download_path": "./temp_downloads"
     }
     config_file = "config.json"
@@ -37,9 +39,9 @@ class IsaacRimLauncher(ctk.CTk):
         self.header = ctk.CTkFrame(self)
         self.header.pack(fill="x", padx=5, pady=5)
         
-        # Estas funciones ahora están definidas abajo correctamente
-        self.crear_input_ruta("Game folder:", self.config["isaac_mods_path"])
-        self.crear_input_ruta("SteamCMD:", self.config["steamcmd_path"])
+        self.entry_steamcmd, _ = self.crear_input_ruta("SteamCMD:", self.config["steamcmd_path"], is_file=True)
+        self.entry_mods, _ = self.crear_input_ruta("Game folder (mods):", self.config["isaac_mods_path"], is_folder=True)
+        self.entry_isaac, _ = self.crear_input_ruta("Isaac Executable:", self.config["isaac_exe_path"], is_file=True)
         
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
         self.main_container.pack(fill="both", expand=True, padx=5, pady=5)
@@ -53,20 +55,53 @@ class IsaacRimLauncher(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self.main_container, width=150)
         self.sidebar.pack(side="right", fill="y", padx=(5, 0))
         
-        self.btn_run = ctk.CTkButton(self.sidebar, text="Run Isaac!", fg_color="#2d5a27")
+        self.btn_run = ctk.CTkButton(self.sidebar, text="Run Isaac!", fg_color="#2d5a27", command=self.ejecutar_isaac)
         self.btn_run.pack(pady=20, padx=10, side="bottom", fill="x")
 
         # Cargar pestañas
         self.setup_downloader_tab()
 
-    def crear_input_ruta(self, etiqueta, valor):
+    def crear_input_ruta(self, etiqueta, valor, is_file=False, is_folder=False):
         """Crea las filas de rutas en la parte superior."""
         frame = ctk.CTkFrame(self.header, fg_color="transparent")
         frame.pack(fill="x", pady=2)
         ctk.CTkLabel(frame, text=etiqueta, width=120, anchor="w").pack(side="left", padx=5)
+        
         entry = ctk.CTkEntry(frame)
         entry.insert(0, valor)
         entry.pack(side="left", fill="x", expand=True, padx=5)
+        
+        def browse_path():
+            if is_file:
+                path = filedialog.askopenfilename(title=f"Seleccionar {etiqueta}", filetypes=[("Executable", "*.exe"), ("All files", "*.*")])
+            elif is_folder:
+                path = filedialog.askdirectory(title=f"Seleccionar {etiqueta}")
+            else:
+                path = None
+            if path:
+                entry.delete(0, "end")
+                entry.insert(0, path)
+                self.guardar_config()
+        
+        ctk.CTkButton(frame, text="📁", width=40, command=browse_path).pack(side="left", padx=2)
+        
+        return entry, None
+    
+    def guardar_config(self):
+        """Guarda las rutas actuales en el archivo config.json"""
+        self.config["steamcmd_path"] = self.entry_steamcmd.get()
+        self.config["isaac_mods_path"] = self.entry_mods.get() if self.entry_mods else ""
+        self.config["isaac_exe_path"] = self.entry_isaac.get() if self.entry_isaac else ""
+        with open("config.json", "w") as f:
+            json.dump(self.config, f, indent=4)
+    
+    def ejecutar_isaac(self):
+        """Ejecuta el juego Isaac"""
+        isaac_exe = self.entry_isaac.get()
+        if isaac_exe and os.path.exists(isaac_exe):
+            subprocess.Popen(isaac_exe)
+        else:
+            print("Error: No se encontró el ejecutable del juego.")
 
     def setup_downloader_tab(self):
         tab = self.tabview.tab("Downloader")
