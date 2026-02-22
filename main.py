@@ -9,14 +9,33 @@ import re
 from tkinter import filedialog
 
 # === CONFIGURACIÓN ===
+import sys
+
+IS_LINUX = sys.platform.startswith("linux")
+
+def get_default_steamcmd_path():
+    return "steamcmd" if IS_LINUX else "D:/steamcmd/steamcmd.exe"
+
+def get_default_mods_path():
+    if IS_LINUX:
+        return os.path.expanduser("~/.local/share/Steam/steamapps/common/The Binding of Isaac Rebirth/mods")
+    return "D:/Juegos/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/mods"
+
+def get_default_exe_path():
+    if IS_LINUX:
+        return os.path.expanduser("~/.local/share/Steam/steamapps/common/The Binding of Isaac Rebirth/isaac-ng")
+    return ""
+
+def get_default_downloads_path():
+    return "./temp_downloads"
+
 def cargar_config():
-    # Ruta específica de tu versión deadcode
-    ruta_mods_default = "D:/Juegos/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/mods"
+    ruta_mods_default = get_default_mods_path()
     config_default = {
-        "steamcmd_path": "D:/steamcmd/steamcmd.exe",
+        "steamcmd_path": get_default_steamcmd_path(),
         "isaac_mods_path": ruta_mods_default,
-        "isaac_exe_path": "",
-        "temp_download_path": "./temp_downloads"
+        "isaac_exe_path": get_default_exe_path(),
+        "temp_download_path": get_default_downloads_path()
     }
     config_file = "config.json"
     if not os.path.exists(config_file):
@@ -101,7 +120,9 @@ class IsaacRimLauncher(ctk.CTk):
         """Ejecuta el juego Isaac"""
         isaac_exe = self.entry_isaac.get()
         if isaac_exe and os.path.exists(isaac_exe):
-            subprocess.Popen(isaac_exe)
+            if IS_LINUX and not os.access(isaac_exe, os.X_OK):
+                os.chmod(isaac_exe, 0o755)
+            subprocess.Popen([isaac_exe] if IS_LINUX else [isaac_exe])
         else:
             print("Error: No se encontró el ejecutable del juego.")
 
@@ -159,14 +180,23 @@ class IsaacRimLauncher(ctk.CTk):
         self.btn_dl.configure(state="disabled", text="Bajando...")
         try:
             temp_dir = os.path.abspath(self.config["temp_download_path"])
-            # Comando de SteamCMD
-            comando = [
-                self.config["steamcmd_path"],
-                "+force_install_dir", f'"{temp_dir}"',
-                "+login", "josuejere", 
-                "+workshop_download_item", "250900", mod_id,
-                "+quit"
-            ]
+            
+            if IS_LINUX:
+                comando = [
+                    "steamcmd",
+                    "+force_install_dir", temp_dir,
+                    "+login", "anonymous",
+                    "+workshop_download_item", "250900", mod_id,
+                    "+quit"
+                ]
+            else:
+                comando = [
+                    self.config["steamcmd_path"],
+                    "+force_install_dir", f'"{temp_dir}"',
+                    "+login", "josuejere",
+                    "+workshop_download_item", "250900", mod_id,
+                    "+quit"
+                ]
             subprocess.run(comando, check=True)
             
             # Rutas de origen y destino

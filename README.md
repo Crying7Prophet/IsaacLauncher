@@ -1,60 +1,32 @@
-PyIsaac Mod Manager v0.1
-PyIsaac es un gestor de mods para The Binding of Isaac: Repentance diseñado en Python. Está fuertemente inspirado en la interfaz y funcionalidad de RimPy, permitiendo a los usuarios navegar por la Steam Workshop de forma integrada y descargar mods directamente usando SteamCMD.
+# 🛠️ PyIsaac Mod Manager v0.1
 
-🚀 Características
-Interfaz RimPy Style: Diseño oscuro y profesional basado en CustomTkinter.
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
+![UI](https://img.shields.io/badge/UI-CustomTkinter-orange)
+![Game](https://img.shields.io/badge/Game-The_Binding_of_Isaac-red)
 
-Navegador Integrado: Explora la Workshop de Steam sin salir del programa.
+**PyIsaac** is an advanced mod manager for *The Binding of Isaac: Repentance* developed in Python. Inspired by the efficiency of **RimPy**, this manager integrates Steam Workshop navigation with the power of SteamCMD to provide a seamless and centralized installation experience.
 
-Descarga con un clic: Detecta automáticamente el ID del mod desde la URL y gestiona la descarga.
+---
 
-Gestión Automática: Descarga, extrae y mueve los mods a la carpeta de instalación del juego.
+## 🚀 Key Features
 
-Configuración Persistente: Guarda tus rutas de SteamCMD y del juego en un archivo config.json para facilitar su uso.
+* **"RimPy Style" Interface:** A modern, professional dark-themed UI built with `CustomTkinter`.
+* **Integrated Browser:** Browse the Steam Workshop directly within the application—no need for an external browser.
+* **Smart Installation:** Automatically detects Mod IDs from URLs and manages downloads with a single click.
+* **Full Automation:** Seamlessly downloads, extracts, and moves files to the game's mod folder.
+* **Data Persistence:** Managed via `config.json` so you only have to set your file paths once.
 
-🛠️ Requisitos Previos
-Antes de ejecutar el launcher, asegúrate de tener instalado lo siguiente:
+---
 
-Python 3.10+ (Recomendado 3.11 o 3.12 para mayor estabilidad).
+## 🛠️ Prerequisites
 
-SteamCMD: Descargado y actualizado en una carpeta accesible (ej. D:\steamcmd).
+To ensure proper functionality, please make sure you meet the following requirements:
 
-Librerías de Python:
+1.  **Python 3.10+**: Versions 3.11 or 3.12 are recommended for optimal stability.
+2.  **SteamCMD**: Must be installed in an accessible directory (e.g., `D:\steamcmd`).
+3.  **Required Libraries**:
+    ```bash
+    pip install customtkinter tkinterweb pyperclip
+    ```
 
-Bash
-
-pip install customtkinter tkinterweb pyperclip
-⚙️ Configuración Inicial
-Al abrir el programa por primera vez, se generará un archivo config.json. Asegúrate de que las rutas sean correctas:
-
-JSON
-
-{
-    "steamcmd_path": "D:/steamcmd/steamcmd.exe",
-    "isaac_mods_path": "C:/Ruta/A/Tu/Juego/mods",
-    "temp_download_path": "./temp_downloads"
-}
-🔑 Importante: El Login de SteamCMD
-Para descargar mods de juegos de pago como The Binding of Isaac, SteamCMD requiere una cuenta válida. Si recibes el error Cached credentials not found:
-
-Abre steamcmd.exe manualmente.
-
-Escribe login TU_USUARIO.
-
-Introduce tu contraseña y el código de Steam Guard.
-
-Una vez leas Logged in OK, ya puedes cerrar la consola y usar el launcher.
-
-📖 Uso
-Ejecuta main.py.
-
-Ve a la pestaña Downloader.
-
-Navega hasta el mod que desees.
-
-Pulsa el botón Detectar para capturar la URL.
-
-Pulsa INSTALAR y espera a que el proceso termine.
-
-⚠️ Problemas Conocidos
-Web de Steam "bugeada": El motor del navegador integrado es ligero y puede tener errores visuales con JavaScript pesado. Si falla, copia el link desde Chrome y pégalo manualmente en el launcher.
+---
