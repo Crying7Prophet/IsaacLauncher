@@ -1,6 +1,8 @@
 {
-    "steamcmd_path": "D:/steamcmd/steamcmd.exe",
-    "isaac_mods_path": "D:/Juegos/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/mods",
-    "isaac_exe_path": "D:/Juegos/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/The.Binding.of.Isaac.Rebirth.v1.9.7.15-0xdeadcode/isaac-ng.exe",
-    "temp_download_path": "./temp_downloads"
+    "steamcmd_path": "steamcmd",
+    "isaac_mods_path": "/mnt/56D879503AD225EA/RESPALDO/Juegos/The Binding of Isaac Rebirth/mods",
+    "isaac_exe_path": "/mnt/56D879503AD225EA/RESPALDO/Juegos/The Binding of Isaac Rebirth/isaac-ng.exe",
+    "temp_download_path": "./temp_downloads",
+    "steam_username": "sumerlef",
+    "steam_password": "ocarinaof_time11"
 }
