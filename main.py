@@ -42,6 +42,7 @@ class IsaacRimLauncher(ctk.CTk):
         self.entry_steamcmd, _ = self.crear_input_ruta("SteamCMD:", self.config["steamcmd_path"], is_file=True)
         self.entry_mods, _ = self.crear_input_ruta("Game folder (mods):", self.config["isaac_mods_path"], is_folder=True)
         self.entry_isaac, _ = self.crear_input_ruta("Isaac Executable:", self.config["isaac_exe_path"], is_file=True)
+        self.entry_downloads, _ = self.crear_input_ruta("Downloads folder:", self.config["temp_download_path"], is_folder=True)
         
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
         self.main_container.pack(fill="both", expand=True, padx=5, pady=5)
@@ -92,6 +93,7 @@ class IsaacRimLauncher(ctk.CTk):
         self.config["steamcmd_path"] = self.entry_steamcmd.get()
         self.config["isaac_mods_path"] = self.entry_mods.get() if self.entry_mods else ""
         self.config["isaac_exe_path"] = self.entry_isaac.get() if self.entry_isaac else ""
+        self.config["temp_download_path"] = self.entry_downloads.get() if self.entry_downloads else ""
         with open("config.json", "w") as f:
             json.dump(self.config, f, indent=4)
     
