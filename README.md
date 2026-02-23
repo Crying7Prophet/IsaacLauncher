@@ -22,10 +22,10 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Integrated Browser** | Navigate Steam Workshop, NexusMods, ModDB, and Modding of Isaac without leaving the app |
-| **Mod Management** | View installed mods with metadata and images fetched automatically from Steam |
-| **Direct Downloads** | Download mods by Steam Workshop ID or URL |
-| **Modern UI** | Sleek dark theme built with PyQt6 |
+| **Integrated Browser** | Navigate Steam Workshop, Smods, NexusMods, ModDB, and Modding of Isaac without leaving the app |
+| **Mod Management** | View installed mods with metadata and images from local files |
+| **Direct Downloads** | Download mods by Steam Workshop ID or Smods URL |
+| **Game Launcher** | Run the game directly from the app |
 | **Cross-Platform** | Works on Windows and Linux |
 
 ---
@@ -34,7 +34,8 @@
 
 ### Prerequisites
 
-- Python 3.10 or higher (3.11+ recommended)
+- Python 3.10 or higher
+- [steamcmd](https://developer.valvesoftware.com/wiki/SteamCMD) (for Steam Workshop downloads)
 - System dependencies for PyQt6 WebEngine:
 
 #### Linux (Ubuntu/Debian)
@@ -60,19 +61,37 @@ No additional dependencies required (install PyQt6-WebEngine via pip)
 
 ### Setup
 
-```bash
-# Run setup script (installs system + python dependencies)
-python setup.py
-```
+1. **Install system dependencies** ( Qt6 libraries for the browser):
+   ```bash
+   python setup.py
+   ```
+
+2. **Activate the virtual environment**:
+   ```bash
+   # Linux/macOS
+   source venv/bin/activate
+   
+   # Windows
+   venv\Scripts\activate
+   ```
+
+3. **Run the app**:
+   ```bash
+   python main.py
+   ```
+
+> **Note**: On first run, the app will create a `config.json` with default paths. Modify it or set paths through the UI.
 
 ---
 
 ## Usage
 
-1. **Configure Mods Path**: Set the path to your Isaac mods folder
-2. **Browse Mods**: Use the integrated browser to find mods on Steam Workshop, NexusMods, etc.
-3. **Download**: Copy the mod URL or Steam Workshop ID and use the download feature
-4. **Manage**: View and organize your installed mods
+1. **Configure Paths**: Set the mods folder and game executable in the header
+2. **Browse Mods**: Use the integrated browser to find mods on Steam Workshop, Smods, NexusMods, etc.
+3. **Download**: 
+   - Enter a Steam Workshop ID and click "Download"
+   - Or use "From Smods" with a Smods URL or ID
+4. **Manage**: View installed mods, delete them, or open the mods folder
 
 ---
 
@@ -93,6 +112,7 @@ python setup.py
 - [PyQt6-WebEngine](https://www.riverbankcomputing.com/software/pyqtwebengine/) - Chromium-based browser
 - [requests](https://docs.python-requests.org/) - HTTP library
 - [Pillow](https://python-pillow.org/) - Image processing
+- [steamcmd](https://developer.valvesoftware.com/wiki/SteamCMD) - For downloading Steam Workshop mods
 
 ---
 

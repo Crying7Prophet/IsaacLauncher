@@ -212,8 +212,6 @@ class PyIsaacLauncher(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        self.setup_header(main_layout)
-        
         self.tab_widget = QTabWidget()
         self.tab_widget.setStyleSheet("""
             QTabWidget::pane {
@@ -254,11 +252,13 @@ class PyIsaacLauncher(QMainWindow):
         
         self.tab_widget.setCurrentIndex(1)
         
+        self.setup_header(main_layout)
+        
     def setup_header(self, main_layout):
         header_frame = QFrame()
         header_frame.setStyleSheet("""
             background-color: #252525;
-            border-bottom: 1px solid #3d3d3d;
+            border-top: 1px solid #3d3d3d;
             padding: 10px;
         """)
         header_layout = QHBoxLayout(header_frame)
@@ -671,9 +671,26 @@ class PyIsaacLauncher(QMainWindow):
         """)
         btn_delete.clicked.connect(self.eliminar_mod_seleccionado)
         
+        btn_open_folder = QPushButton("📂")
+        btn_open_folder.setFixedWidth(35)
+        btn_open_folder.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """)
+        btn_open_folder.clicked.connect(self.abrir_carpeta_mods)
+        
         toolbar_layout.addWidget(btn_refresh)
         toolbar_layout.addWidget(btn_add)
         toolbar_layout.addWidget(btn_delete)
+        toolbar_layout.addWidget(btn_open_folder)
         toolbar_layout.addStretch()
         
         left_layout.addWidget(toolbar)
@@ -822,6 +839,10 @@ class PyIsaacLauncher(QMainWindow):
         
         if self.mods_list:
             self.lista_mods.setCurrentRow(0)
+            self.on_mod_select(self.lista_mods.currentItem())
+        else:
+            self.mod_seleccionado = None
+            self.mostrar_info_mod("")
     
     def procesar_zips_en_carpeta(self, mods_path):
         for item in os.listdir(mods_path):
@@ -867,7 +888,30 @@ class PyIsaacLauncher(QMainWindow):
             self.mostrar_info_mod(mod_name)
     
     def mostrar_info_mod(self, nombre):
-        self.mod_seleccionado = nombre
+        self.mod_seleccionado = nombre if nombre else None
+        
+        if not nombre:
+            self.lbl_info_titulo.setText("Select a mod")
+            self.lbl_info_buscar.setText("")
+            self.lbl_info_desc.setText("")
+            self.lbl_info_autor.setText("")
+            
+            for i in range(self.images_layout.count()):
+                widget = self.images_layout.itemAt(i).widget()
+                if widget:
+                    widget.deleteLater()
+            
+            placeholder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "placeholder.svg")
+            if os.path.exists(placeholder_path):
+                placeholder = QSvgWidget(placeholder_path)
+                placeholder.setFixedSize(200, 150)
+                self.images_layout.addWidget(placeholder)
+            else:
+                lbl = QLabel("No images")
+                lbl.setStyleSheet("color: gray;")
+                self.images_layout.addWidget(lbl)
+            return
+        
         self.lbl_info_titulo.setText(nombre)
         self.lbl_info_buscar.setText("Loading...")
         self.lbl_info_desc.setText("")
@@ -878,7 +922,11 @@ class PyIsaacLauncher(QMainWindow):
     def leer_metadata_local(self, nombre):
         import xml.etree.ElementTree as ET
         
-        mods_path = self.entry_mods.text()
+        if self.entry_mods and self.entry_mods.text():
+            mods_path = self.entry_mods.text()
+        else:
+            mods_path = self.config.get("isaac_mods_path", get_default_mods_path())
+        
         mod_path = os.path.join(mods_path, nombre)
         
         metadata_file = os.path.join(mod_path, "metadata.xml")
@@ -952,7 +1000,7 @@ class PyIsaacLauncher(QMainWindow):
             placeholder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "placeholder.svg")
             if os.path.exists(placeholder_path):
                 placeholder = QSvgWidget(placeholder_path)
-                placeholder.setFixedSize(400, 300)
+                placeholder.setFixedSize(200, 150)
                 self.images_layout.addWidget(placeholder)
             else:
                 lbl = QLabel("No images")
@@ -976,6 +1024,18 @@ class PyIsaacLauncher(QMainWindow):
             print(f"Mod eliminado: {self.mod_seleccionado}")
             self.mod_seleccionado = None
             self.actualizar_lista_mods()
+    
+    def abrir_carpeta_mods(self):
+        mods_path = self.entry_mods.text() if self.entry_mods else self.config.get("isaac_mods_path", get_default_mods_path())
+        if mods_path and os.path.exists(mods_path):
+            if IS_LINUX:
+                subprocess.run(["xdg-open", mods_path])
+            elif sys.platform == "darwin":
+                subprocess.run(["open", mods_path])
+            else:
+                os.startfile(mods_path)
+        else:
+            QMessageBox.warning(self, "Error", "Mods folder not found")
     
     def navegar_url(self):
         url = self.url_entry.text().strip()
