@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import zipfile
 import requests
+import threading
 from tkinter import filedialog
 
 import sys
@@ -115,6 +116,154 @@ class IsaacRimLauncher(ctk.CTk):
         else:
             print("Error: No se encontró el ejecutable del juego.")
 
+    def descargar_por_id(self):
+        mod_id = self.mod_id_entry.get().strip()
+        if not mod_id:
+            print("Error: Introduce un ID de mod")
+            return
+        
+        if not mod_id.isdigit():
+            print("Error: El ID debe ser solo números")
+            return
+        
+        threading.Thread(target=self._descarga_steamcmd, args=(mod_id,), daemon=True).start()
+    
+    def _descarga_steamcmd(self, mod_id):
+        self.btn_descarga_directa.configure(state="disabled", text="Bajando...")
+        try:
+            temp_dir = os.path.abspath(self.config["temp_download_path"])
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            comando = [
+                self.config["steamcmd_path"],
+                "+force_install_dir", temp_dir,
+                "+login", "anonymous",
+                "+workshop_download_item", "250900", mod_id,
+                "+quit"
+            ]
+            
+            subprocess.run(comando, check=True, capture_output=True)
+            
+            origen = os.path.join(temp_dir, "steamapps", "workshop", "content", "250900", mod_id)
+            destino = os.path.join(self.config["isaac_mods_path"], f"workshop_{mod_id}")
+            
+            if os.path.exists(origen):
+                if os.path.exists(destino):
+                    shutil.rmtree(destino)
+                shutil.copytree(origen, destino)
+                print(f"¡Mod {mod_id} instalado con éxito!")
+            else:
+                print("SteamCMD terminó pero no se encontraron los archivos.")
+        except Exception as e:
+            print(f"Error en el proceso: {e}")
+        finally:
+            self.btn_descarga_directa.configure(state="normal", text="INSTALAR")
+
+    def descargar_desde_smods(self):
+        url_or_id = self.mod_id_entry.get().strip()
+        
+        if not url_or_id:
+            print("Ingresa una URL o ID de mod de Smods")
+            return
+        
+        if "catalogue.smods.ru/archives/" in url_or_id:
+            url = url_or_id
+        elif url_or_id.isdigit():
+            url = f"https://catalogue.smods.ru/archives/{url_or_id}"
+        else:
+            print("URL inválida. Usa una URL de Smods o el ID del mod")
+            return
+        
+        threading.Thread(target=self._descarga_smods_thread, args=(url,), daemon=True).start()
+    
+    def _descarga_smods_thread(self, url):
+        self.btn_descarga_directa.configure(state="disabled", text="Buscando...")
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            import re
+            download_match = re.search(r'href="(https?://[^"]+\.zip[^"]*)"', response.text)
+            
+            if not download_match:
+                download_match = re.search(r'class="skymods-excerpt-btn"[^>]*href="([^"]+)"', response.text)
+            
+            if not download_match:
+                print("No se encontró enlace de descarga en la página")
+                self.btn_descarga_directa.configure(state="normal", text="Descargar desde Smods")
+                return
+            
+            download_url = download_match.group(1)
+            print(f"URL de descarga: {download_url}")
+            
+            self.btn_descarga_directa.configure(state="disabled", text="Descargando...")
+            
+            temp_dir = os.path.abspath(self.config["temp_download_path"])
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            filename = "mod.zip"
+            filepath = os.path.join(temp_dir, filename)
+            
+            response = requests.get(download_url, headers=headers, stream=True, timeout=120)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+            
+            print(f"Descarga completada: {filepath}")
+            
+            mods_path = self.config["isaac_mods_path"]
+            os.makedirs(mods_path, exist_ok=True)
+            
+            import tempfile
+            with tempfile.TemporaryDirectory() as temp_extract:
+                with zipfile.ZipFile(filepath, 'r') as zip_ref:
+                    zip_ref.extractall(temp_extract)
+                
+                contenido = os.listdir(temp_extract)
+                
+                if len(contenido) == 1 and os.path.isdir(os.path.join(temp_extract, contenido[0])):
+                    carpeta_extraida = os.path.join(temp_extract, contenido[0])
+                else:
+                    carpeta_extraida = temp_extract
+                
+                nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
+                
+                if nombre_oficial:
+                    destino = os.path.join(mods_path, nombre_oficial)
+                    print(f"Nombre oficial del mod: {nombre_oficial}")
+                else:
+                    destino = None
+                    print("No se encontró nombre en metadata, usa nombre manual")
+                
+                if destino:
+                    if os.path.exists(destino):
+                        shutil.rmtree(destino)
+                    shutil.copytree(carpeta_extraida, destino)
+                else:
+                    destino = os.path.join(mods_path, "mod_sin_nombre")
+                    if os.path.exists(destino):
+                        shutil.rmtree(destino)
+                    shutil.copytree(carpeta_extraida, destino)
+            
+            print(f"Mod instalado en: {destino}")
+            self.actualizar_lista_mods()
+            
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            self.btn_descarga_directa.configure(state="normal", text="Descargar desde Smods")
+
     def mostrar_about(self):
         about_win = ctk.CTkToplevel(self)
         about_win.title("About IsaacRim")
@@ -160,6 +309,19 @@ class IsaacRimLauncher(ctk.CTk):
         self.lbl_zoom = ctk.CTkLabel(nav_bar, text="100%", width=50)
         self.lbl_zoom.pack(side="left", padx=5)
 
+        download_bar = ctk.CTkFrame(tab, height=45)
+        download_bar.pack(fill="x", padx=5, pady=(0, 5))
+        
+        ctk.CTkLabel(download_bar, text="Descarga directa (ID Steam):", font=("Arial", 11, "bold")).pack(side="left", padx=5)
+        
+        self.mod_id_entry = ctk.CTkEntry(download_bar, placeholder_text="ID o URL de mod", width=200)
+        self.mod_id_entry.pack(side="left", padx=5)
+        
+        self.btn_descarga_directa = ctk.CTkButton(download_bar, text="Descargar", fg_color="#1f538d", command=self.descargar_por_id)
+        self.btn_descarga_directa.pack(side="left", padx=5)
+        
+        ctk.CTkButton(download_bar, text="Desde Smods", fg_color="#2d5a27", command=self.descargar_desde_smods).pack(side="left", padx=5)
+
         shortcuts_bar = ctk.CTkFrame(tab)
         shortcuts_bar.pack(fill="x", padx=5, pady=(0, 5))
         
@@ -167,6 +329,7 @@ class IsaacRimLauncher(ctk.CTk):
         
         shortcuts = [
             ("Steam Workshop", "https://steamcommunity.com/app/250900/workshop/"),
+            ("Smods", "https://catalogue.smods.ru/?app=250900"),
             ("NexusMods", "https://www.nexusmods.com/bindingofisaacrebirth"),
             ("ModDB", "https://www.moddb.com/games/the-binding-of-isaac-rebirth"),
             ("Modding of Isaac", "https://moddingofisaac.com/"),
@@ -208,8 +371,13 @@ class IsaacRimLauncher(ctk.CTk):
         ctk.CTkButton(toolbar, text="+", width=35, fg_color="#1f538d", command=self.seleccionar_archivo).pack(side="left", padx=2)
         ctk.CTkButton(toolbar, text="🗑", width=35, fg_color="#8d1f1f", command=self.eliminar_mod_seleccionado).pack(side="left", padx=2)
         
-        self.lista_mods = ctk.CTkScrollableFrame(left_panel, label_text="Mods instalados")
-        self.lista_mods.pack(fill="both", expand=True, padx=5, pady=5)
+        self.lista_mods_frame = ctk.CTkFrame(left_panel)
+        self.lista_mods_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        from tkinter import Listbox
+        self.lista_mods = Listbox(self.lista_mods_frame, bg="#2b2b2b", fg="white", selectbackground="#1f538d", borderwidth=0, highlightthickness=0)
+        self.lista_mods.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        self.lista_mods.bind("<<ListboxSelect>>", self.on_mod_select)
         
         self.panel_info = ctk.CTkFrame(mods_container)
         self.panel_info.pack(side="right", fill="both", expand=True)
@@ -301,46 +469,84 @@ class IsaacRimLauncher(ctk.CTk):
             print(f"Error imagen: {e}")
 
     def actualizar_lista_mods(self):
-        for widget in self.lista_mods.winfo_children():
-            widget.destroy()
-        
         mods_path = self.entry_mods.get()
         if not os.path.exists(mods_path):
             os.makedirs(mods_path, exist_ok=True)
         
+        self.procesar_zips_en_carpeta(mods_path)
+        
+        self.lista_mods.delete(0, "end")
+        
         items = os.listdir(mods_path)
         if not items:
-            ctk.CTkLabel(self.lista_mods, text="No hay mods instalados").pack(pady=20)
+            self.lista_mods.insert("end", "No hay mods instalados")
             return
         
         self.mod_seleccionado = None
+        self.mods_list = []
         
         for item in sorted(items):
             item_path = os.path.join(mods_path, item)
             if os.path.isdir(item_path):
-                frame = ctk.CTkFrame(self.lista_mods)
-                frame.pack(fill="x", pady=2, padx=5)
+                self.lista_mods.insert("end", item)
+                self.mods_list.append(item)
+    
+    def procesar_zips_en_carpeta(self, mods_path):
+        import tempfile
+        
+        for item in os.listdir(mods_path):
+            if item.endswith(".zip"):
+                zip_path = os.path.join(mods_path, item)
+                print(f"Procesando: {item}")
                 
-                btn = ctk.CTkButton(
-                    frame, 
-                    text=item, 
-                    anchor="w",
-                    command=lambda n=item: self.seleccionar_mod(n)
-                )
-                btn.pack(side="left", fill="x", expand=True, padx=5)
-                
-                archivos = os.listdir(item_path)
-                count = len(archivos)
-                ctk.CTkLabel(frame, text=f"{count} archivos", width=80).pack(side="right", padx=5)
+                try:
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                            zip_ref.extractall(temp_dir)
+                        
+                        contenido = os.listdir(temp_dir)
+                        
+                        if len(contenido) == 1 and os.path.isdir(os.path.join(temp_dir, contenido[0])):
+                            carpeta_extraida = os.path.join(temp_dir, contenido[0])
+                        else:
+                            carpeta_extraida = temp_dir
+                        
+                        nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
+                        
+                        if nombre_oficial:
+                            destino = os.path.join(mods_path, nombre_oficial)
+                            print(f"Nombre oficial del mod: {nombre_oficial}")
+                        else:
+                            destino = None
+                        
+                        if destino:
+                            if os.path.exists(destino):
+                                shutil.rmtree(destino)
+                            shutil.copytree(carpeta_extraida, destino)
+                        else:
+                            nombre_base = os.path.splitext(item)[0]
+                            destino = os.path.join(mods_path, nombre_base)
+                            if os.path.exists(destino):
+                                shutil.rmtree(destino)
+                            shutil.copytree(carpeta_extraida, destino)
+                        
+                        os.remove(zip_path)
+                        print(f"Mod instalado y zip eliminado: {destino}")
+                        
+                except Exception as e:
+                    print(f"Error procesando {item}: {e}")
+    
+    def on_mod_select(self, event):
+        selection = self.lista_mods.curselection()
+        if selection:
+            index = selection[0]
+            if index < len(self.mods_list):
+                mod_name = self.mods_list[index]
+                self.mod_seleccionado = mod_name
+                self.mostrar_info_mod(mod_name)
 
-    def seleccionar_mod(self, nombre):
+    def mostrar_info_mod(self, nombre):
         self.mod_seleccionado = nombre
-        for widget in self.lista_mods.winfo_children():
-            for child in widget.winfo_children():
-                if isinstance(child, ctk.CTkButton) and child.cget("text") == nombre:
-                    child.configure(fg_color="#1f538d")
-                elif isinstance(child, ctk.CTkButton):
-                    child.configure(fg_color="#3a3a3a")
         
         self.lbl_info_titulo.configure(text=nombre)
         self.lbl_info_imagen.configure(image="", text="")
@@ -376,7 +582,7 @@ class IsaacRimLauncher(ctk.CTk):
                 
                 if mejor_match:
                     mod_id, titulo = mejor_match
-                    self.after(0, lambda m=mod_id, t=titulo: self.mostrar_info_mod(m, t))
+                    self.after(0, lambda m=mod_id, t=titulo: self.mostrar_info_mod_por_id(m, t))
                 else:
                     self.after(0, lambda: self.lbl_info_buscar.configure(text="No se encontró en Steam"))
             else:
@@ -384,7 +590,7 @@ class IsaacRimLauncher(ctk.CTk):
         except Exception as e:
             self.after(0, lambda: self.lbl_info_buscar.configure(text=f"Error: {str(e)[:30]}"))
 
-    def mostrar_info_mod(self, mod_id, titulo):
+    def mostrar_info_mod_por_id(self, mod_id, titulo):
         self.lbl_info_buscar.configure(text=f"ID: {mod_id}")
         self.lbl_info_titulo.configure(text=titulo)
         self.buscar_info_mod_por_id(mod_id)
@@ -453,15 +659,40 @@ class IsaacRimLauncher(ctk.CTk):
             mods_path = self.entry_mods.get()
             os.makedirs(mods_path, exist_ok=True)
             
-            filename = os.path.basename(filepath)
-            nombre_mod = os.path.splitext(filename)[0]
-            destino = os.path.join(mods_path, nombre_mod)
-            
             try:
                 if filepath.endswith(".zip"):
-                    with zipfile.ZipFile(filepath, 'r') as zip_ref:
-                        zip_ref.extractall(destino)
+                    import tempfile
+                    
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        with zipfile.ZipFile(filepath, 'r') as zip_ref:
+                            zip_ref.extractall(temp_dir)
+                        
+                        contenido = os.listdir(temp_dir)
+                        
+                        if len(contenido) == 1 and os.path.isdir(os.path.join(temp_dir, contenido[0])):
+                            carpeta_extraida = os.path.join(temp_dir, contenido[0])
+                        else:
+                            carpeta_extraida = temp_dir
+                        
+                        nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
+                        
+                        if nombre_oficial:
+                            destino = os.path.join(mods_path, nombre_oficial)
+                            print(f"Nombre oficial del mod: {nombre_oficial}")
+                        else:
+                            destino = None
+                        
+                        if destino and os.path.exists(destino):
+                            shutil.rmtree(destino)
+                        
+                        if destino:
+                            shutil.copytree(carpeta_extraida, destino)
+                        else:
+                            print("No se encontró nombre en metadata")
                 else:
+                    filename = os.path.basename(filepath)
+                    nombre_mod = os.path.splitext(filename)[0]
+                    destino = os.path.join(mods_path, nombre_mod)
                     os.makedirs(destino, exist_ok=True)
                     shutil.copy2(filepath, destino)
                 
@@ -469,6 +700,30 @@ class IsaacRimLauncher(ctk.CTk):
                 self.actualizar_lista_mods()
             except Exception as e:
                 print(f"Error instalando mod: {e}")
+    
+    def buscar_nombre_en_metadata(self, folder):
+        import re
+        
+        for root, dirs, files in os.walk(folder):
+            for file in files:
+                if file in ["metadata.xml", "metadata.txt", "info.xml", "info.txt"]:
+                    filepath = os.path.join(root, file)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        
+                        match = re.search(r'<name>([^<]+)</name>', content, re.IGNORECASE)
+                        if match:
+                            nombre = match.group(1).strip()
+                            return nombre
+                        
+                        match = re.search(r'^Name\s*=\s*(.+)$', content, re.MULTILINE | re.IGNORECASE)
+                        if match:
+                            nombre = match.group(1).strip()
+                            return nombre
+                    except:
+                        pass
+        return None
 
 if __name__ == "__main__":
     app = IsaacRimLauncher()
