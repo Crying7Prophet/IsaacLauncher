@@ -1,4 +1,4 @@
-# 🛠️ PyIsaac Launcher
+# PyIsaac Launcher
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-CustomTkinter-orange)
@@ -8,7 +8,7 @@
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 * **Integrated Browser:** Navigate Steam Workshop, NexusMods, ModDB, and Modding of Isaac directly within the app.
 * **Mod Management:** View installed mods with metadata and images fetched automatically from Steam.
@@ -17,7 +17,7 @@
 
 ---
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 1. **Python 3.10+**: Versions 3.11 or 3.12 recommended.
 2. **Required Libraries**:
@@ -27,6 +27,6 @@
 
 ---
 
-## 🗒️ To Do
+## To Do
 
 1. Add more mod sources
