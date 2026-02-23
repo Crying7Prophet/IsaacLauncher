@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinterweb import HtmlFrame 
+from PIL import Image
 import os
 import json
 import subprocess
@@ -110,7 +111,8 @@ class PyIsaacLauncher(ctk.CTk):
             if IS_LINUX and not os.access(isaac_exe, os.X_OK):
                 os.chmod(isaac_exe, 0o755)
             if IS_LINUX:
-                subprocess.Popen(["wine", isaac_exe])
+                exe_dir = os.path.dirname(isaac_exe)
+                subprocess.Popen(["wine", os.path.basename(isaac_exe)], cwd=exe_dir)
             else:
                 subprocess.Popen([isaac_exe])
         else:
@@ -267,12 +269,33 @@ class PyIsaacLauncher(ctk.CTk):
     def setup_about_tab(self):
         tab = self.tabview.tab("About")
         
-        ctk.CTkLabel(tab, text="PyIsaac Launcher", font=("Arial", 20, "bold")).pack(pady=20)
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.svg")
+        logo_photo = None
+        
+        if os.path.exists(logo_path):
+            try:
+                import cairosvg
+                from io import BytesIO
+                png_data = cairosvg.svg2png(url=logo_path, output_width=120, output_height=120)
+                img = Image.open(BytesIO(png_data))
+                from PIL import ImageTk
+                logo_photo = ImageTk.PhotoImage(img)
+            except ImportError:
+                print("cairosvg not installed")
+            except Exception as e:
+                print(f"Error loading SVG logo: {e}")
+        
+        if logo_photo:
+            lbl = ctk.CTkLabel(tab, image=logo_photo, text="")
+            lbl.image = logo_photo
+            lbl.pack(pady=0)
+        
+        ctk.CTkLabel(tab, text="PyIsaac Launcher", font=("Arial", 20, "bold")).pack(pady=0)
         ctk.CTkLabel(tab, text="Version 1.0", font=("Arial", 14)).pack()
         
-        ctk.CTkLabel(tab, text="A mod manager for\nThe Binding of Isaac: Repentance", justify="center").pack(pady=20)
+        ctk.CTkLabel(tab, text="A mod manager for\nThe Binding of Isaac: Repentance", justify="center").pack(pady=5)
         
-        ctk.CTkLabel(tab, text="Features:", font=("Arial", 12, "bold")).pack(pady=(10, 5))
+        ctk.CTkLabel(tab, text="Features:", font=("Arial", 12, "bold")).pack(pady=(5, 2))
         features = [
             "• Integrated browser for mod sites",
             "• Automatic metadata from Steam",
