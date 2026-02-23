@@ -37,42 +37,41 @@ def cargar_config():
     with open(config_file, "r") as f:
         return json.load(f)
 
-class IsaacRimLauncher(ctk.CTk):
+class PyIsaacLauncher(ctk.CTk):
     def __init__(self):
         super().__init__()
         
         self.config = cargar_config()
         
-        self.title("IsaacRim Mod Manager v1.0")
-        self.geometry("1200x900")
+        self.title("PyIsaac Launcher v1.0")
+        self.geometry("1100x600")
         ctk.set_appearance_mode("dark")
 
-        self.header = ctk.CTkFrame(self)
-        self.header.pack(fill="x", padx=5, pady=5)
-        
-        self.btn_run = ctk.CTkButton(self.header, text="🎮 Run Game", fg_color="#2d5a27", command=self.ejecutar_isaac)
-        self.btn_run.pack(side="right", padx=5)
-        
-        self.btn_about = ctk.CTkButton(self.header, text="ℹ️ About", width=70, command=self.mostrar_about)
-        self.btn_about.pack(side="right", padx=5)
-        
-        self.entry_mods, _ = self.crear_input_ruta("Mods:", self.config["isaac_mods_path"], is_folder=True)
-        self.entry_isaac, _ = self.crear_input_ruta("Isaac:", self.config["isaac_exe_path"], is_file=True)
-        
         self.main_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_container.pack(fill="both", expand=True, padx=5, pady=5)
+        self.main_container.pack(fill="both", expand=True, padx=5, pady=(5, 0))
 
         self.tabview = ctk.CTkTabview(self.main_container)
         self.tabview.pack(side="left", fill="both", expand=True)
-        self.tabview.add("Navegador")
+        self.tabview.add("Browser")
         self.tabview.add("Mods")
+        self.tabview.add("About")
         
         self.update()
         
         self.tabview.set("Mods")
+
+        self.header = ctk.CTkFrame(self, height=60)
+        self.header.pack(fill="x", padx=5, pady=5, side="bottom")
+        
+        self.btn_run = ctk.CTkButton(self.header, text="🎮 Run Game", fg_color="#2d5a27", height=40, command=self.ejecutar_isaac)
+        self.btn_run.pack(side="right", padx=5, pady=5)
+        
+        self.entry_mods, _ = self.crear_input_ruta("Mods:", self.config["isaac_mods_path"], is_folder=True)
+        self.entry_isaac, _ = self.crear_input_ruta("Game:", self.config["isaac_exe_path"], is_file=True)
         
         self.setup_browser_tab()
         self.setup_mods_tab()
+        self.setup_about_tab()
 
     def crear_input_ruta(self, etiqueta, valor, is_file=False, is_folder=False):
         frame = ctk.CTkFrame(self.header, fg_color="transparent")
@@ -85,9 +84,9 @@ class IsaacRimLauncher(ctk.CTk):
         
         def browse_path():
             if is_file:
-                path = filedialog.askopenfilename(title=f"Seleccionar {etiqueta}")
+                path = filedialog.askopenfilename(title=f"Select {etiqueta}")
             elif is_folder:
-                path = filedialog.askdirectory(title=f"Seleccionar {etiqueta}")
+                path = filedialog.askdirectory(title=f"Select {etiqueta}")
             else:
                 path = None
             if path:
@@ -115,16 +114,16 @@ class IsaacRimLauncher(ctk.CTk):
             else:
                 subprocess.Popen([isaac_exe])
         else:
-            print("Error: No se encontró el ejecutable del juego.")
-
+            print("Error: Game executable not found.")
+    
     def descargar_por_id(self):
         mod_id = self.mod_id_entry.get().strip()
         if not mod_id:
-            print("Error: Introduce un ID de mod")
+            print("Error: Enter a mod ID")
             return
         
         if not mod_id.isdigit():
-            print("Error: El ID debe ser solo números")
+            print("Error: ID must be numbers only")
             return
         
         threading.Thread(target=self._descarga_steamcmd, args=(mod_id,), daemon=True).start()
@@ -156,7 +155,7 @@ class IsaacRimLauncher(ctk.CTk):
             else:
                 print("SteamCMD terminó pero no se encontraron los archivos.")
         except Exception as e:
-            print(f"Error en el proceso: {e}")
+                print(f"Error in process: {e}")
         finally:
             self.btn_descarga_directa.configure(state="normal", text="INSTALAR")
 
@@ -164,7 +163,7 @@ class IsaacRimLauncher(ctk.CTk):
         url_or_id = self.mod_id_entry.get().strip()
         
         if not url_or_id:
-            print("Ingresa una URL o ID de mod de Smods")
+            print("Enter a Smods URL or mod ID")
             return
         
         if "catalogue.smods.ru/archives/" in url_or_id:
@@ -172,13 +171,13 @@ class IsaacRimLauncher(ctk.CTk):
         elif url_or_id.isdigit():
             url = f"https://catalogue.smods.ru/archives/{url_or_id}"
         else:
-            print("URL inválida. Usa una URL de Smods o el ID del mod")
+            print("Invalid URL. Use a Smods URL or mod ID")
             return
         
         threading.Thread(target=self._descarga_smods_thread, args=(url,), daemon=True).start()
     
     def _descarga_smods_thread(self, url):
-        self.btn_descarga_directa.configure(state="disabled", text="Buscando...")
+        self.btn_descarga_directa.configure(state="disabled", text="Searching...")
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -195,13 +194,13 @@ class IsaacRimLauncher(ctk.CTk):
             
             if not download_match:
                 print("No se encontró enlace de descarga en la página")
-                self.btn_descarga_directa.configure(state="normal", text="Descargar desde Smods")
+                self.btn_descarga_directa.configure(state="normal", text="Download from Smods")
                 return
             
             download_url = download_match.group(1)
-            print(f"URL de descarga: {download_url}")
+            print(f"Download URL: {download_url}")
             
-            self.btn_descarga_directa.configure(state="disabled", text="Descargando...")
+            self.btn_descarga_directa.configure(state="disabled", text="Downloading...")
             
             temp_dir = os.path.abspath(self.config["temp_download_path"])
             os.makedirs(temp_dir, exist_ok=True)
@@ -221,7 +220,7 @@ class IsaacRimLauncher(ctk.CTk):
                         f.write(chunk)
                         downloaded += len(chunk)
             
-            print(f"Descarga completada: {filepath}")
+            print(f"Download completed: {filepath}")
             
             mods_path = self.config["isaac_mods_path"]
             os.makedirs(mods_path, exist_ok=True)
@@ -263,20 +262,17 @@ class IsaacRimLauncher(ctk.CTk):
         except Exception as e:
             print(f"Error: {e}")
         finally:
-            self.btn_descarga_directa.configure(state="normal", text="Descargar desde Smods")
+            self.btn_descarga_directa.configure(state="normal", text="Download from Smods")
 
-    def mostrar_about(self):
-        about_win = ctk.CTkToplevel(self)
-        about_win.title("About IsaacRim")
-        about_win.geometry("400x350")
-        about_win.resizable(False, False)
+    def setup_about_tab(self):
+        tab = self.tabview.tab("About")
         
-        ctk.CTkLabel(about_win, text="IsaacRim Mod Manager", font=("Arial", 20, "bold")).pack(pady=20)
-        ctk.CTkLabel(about_win, text="Versión 1.0", font=("Arial", 14)).pack()
+        ctk.CTkLabel(tab, text="PyIsaac Launcher", font=("Arial", 20, "bold")).pack(pady=20)
+        ctk.CTkLabel(tab, text="Version 1.0", font=("Arial", 14)).pack()
         
-        ctk.CTkLabel(about_win, text="A mod manager for\nThe Binding of Isaac: Repentance", justify="center").pack(pady=20)
+        ctk.CTkLabel(tab, text="A mod manager for\nThe Binding of Isaac: Repentance", justify="center").pack(pady=20)
         
-        ctk.CTkLabel(about_win, text="Features:", font=("Arial", 12, "bold")).pack(pady=(10, 5))
+        ctk.CTkLabel(tab, text="Features:", font=("Arial", 12, "bold")).pack(pady=(10, 5))
         features = [
             "• Integrated browser for mod sites",
             "• Automatic metadata from Steam",
@@ -284,12 +280,10 @@ class IsaacRimLauncher(ctk.CTk):
             "• Modern dark UI"
         ]
         for f in features:
-            ctk.CTkLabel(about_win, text=f, justify="left").pack()
-        
-        ctk.CTkButton(about_win, text="Cerrar", command=about_win.destroy).pack(pady=20)
+            ctk.CTkLabel(tab, text=f, justify="left").pack()
 
     def setup_browser_tab(self):
-        tab = self.tabview.tab("Navegador")
+        tab = self.tabview.tab("Browser")
         
         nav_bar = ctk.CTkFrame(tab, height=50)
         nav_bar.pack(fill="x", padx=5, pady=5)
@@ -298,11 +292,11 @@ class IsaacRimLauncher(ctk.CTk):
         ctk.CTkButton(nav_bar, text="→", width=40, command=self.adelante).pack(side="left", padx=2)
         ctk.CTkButton(nav_bar, text="⟳", width=40, command=self.recargar).pack(side="left", padx=2)
         
-        self.url_entry = ctk.CTkEntry(nav_bar, placeholder_text="Escribe una URL...")
+        self.url_entry = ctk.CTkEntry(nav_bar, placeholder_text="Enter a URL...")
         self.url_entry.pack(side="left", fill="x", expand=True, padx=5)
         self.url_entry.bind("<Return>", lambda e: self.navegar_url())
         
-        ctk.CTkButton(nav_bar, text="Ir", width=60, command=self.navegar_url).pack(side="left", padx=2)
+        ctk.CTkButton(nav_bar, text="Go", width=60, command=self.navegar_url).pack(side="left", padx=2)
         
         ctk.CTkButton(nav_bar, text="−", width=35, command=self.zoom_out).pack(side="left", padx=(10, 2))
         ctk.CTkButton(nav_bar, text="+", width=35, command=self.zoom_in).pack(side="left", padx=2)
@@ -313,12 +307,12 @@ class IsaacRimLauncher(ctk.CTk):
         download_bar = ctk.CTkFrame(tab, height=45)
         download_bar.pack(fill="x", padx=5, pady=(0, 5))
         
-        ctk.CTkLabel(download_bar, text="Descarga directa (ID Steam):", font=("Arial", 11, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(download_bar, text="Direct download (Steam ID):", font=("Arial", 11, "bold")).pack(side="left", padx=5)
         
-        self.mod_id_entry = ctk.CTkEntry(download_bar, placeholder_text="ID o URL de mod", width=200)
+        self.mod_id_entry = ctk.CTkEntry(download_bar, placeholder_text="Mod ID or URL", width=200)
         self.mod_id_entry.pack(side="left", padx=5)
         
-        self.btn_descarga_directa = ctk.CTkButton(download_bar, text="Descargar", fg_color="#1f538d", command=self.descargar_por_id)
+        self.btn_descarga_directa = ctk.CTkButton(download_bar, text="Download", fg_color="#1f538d", command=self.descargar_por_id)
         self.btn_descarga_directa.pack(side="left", padx=5)
         
         ctk.CTkButton(download_bar, text="Desde Smods", fg_color="#2d5a27", command=self.descargar_desde_smods).pack(side="left", padx=5)
@@ -326,7 +320,7 @@ class IsaacRimLauncher(ctk.CTk):
         shortcuts_bar = ctk.CTkFrame(tab)
         shortcuts_bar.pack(fill="x", padx=5, pady=(0, 5))
         
-        ctk.CTkLabel(shortcuts_bar, text="Enlaces:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(shortcuts_bar, text="Links:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
         
         shortcuts = [
             ("Steam Workshop", "https://steamcommunity.com/app/250900/workshop/"),
@@ -381,7 +375,7 @@ class IsaacRimLauncher(ctk.CTk):
         self.lista_mods.bind("<<ListboxSelect>>", self.on_mod_select)
         
         self.panel_info = ctk.CTkFrame(mods_container)
-        self.panel_info.pack(side="right", fill="both", expand=True)
+        self.panel_info.pack(side="left", fill="both", expand=True)
         
         from tkinter import Canvas, Scrollbar
         self.info_canvas = Canvas(self.panel_info, bg="#2b2b2b", highlightthickness=0)
@@ -397,23 +391,35 @@ class IsaacRimLauncher(ctk.CTk):
         
         self.info_content.bind("<Configure>", lambda e: self.info_canvas.configure(scrollregion=self.info_canvas.bbox("all")))
         
-        self.lbl_info_titulo = ctk.CTkLabel(self.info_content, text="Selecciona un mod", font=("Arial", 16, "bold"))
+        self.lbl_info_titulo = ctk.CTkLabel(self.info_content, text="Select a mod", font=("Arial", 16, "bold"), wraplength=300)
         self.lbl_info_titulo.pack(pady=(20, 10), padx=10)
         
-        self.lbl_info_imagen = ctk.CTkLabel(self.info_content, text="")
-        self.lbl_info_imagen.pack(pady=10, padx=10)
-        
-        self.lbl_info_buscar = ctk.CTkLabel(self.info_content, text="Cargando...", text_color="gray")
+        self.lbl_info_buscar = ctk.CTkLabel(self.info_content, text="Loading...", text_color="gray", wraplength=300)
         self.lbl_info_buscar.pack(pady=5, padx=10)
         
-        self.lbl_info_desc = ctk.CTkLabel(self.info_content, text="", wraplength=320, justify="left")
+        self.lbl_info_desc = ctk.CTkLabel(self.info_content, text="", wraplength=300, justify="left")
         self.lbl_info_desc.pack(pady=10, padx=10)
         
-        self.lbl_info_autor = ctk.CTkLabel(self.info_content, text="")
+        self.lbl_info_autor = ctk.CTkLabel(self.info_content, text="", wraplength=300)
         self.lbl_info_autor.pack(pady=5, padx=10)
         
-        self.imagenes_frame = ctk.CTkFrame(self.info_content, fg_color="transparent")
-        self.imagenes_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.panel_imagenes = ctk.CTkFrame(mods_container)
+        self.panel_imagenes.pack(side="right", fill="both", expand=True, padx=(5, 0))
+        
+        self.imagenes_canvas = Canvas(self.panel_imagenes, bg="#2b2b2b", highlightthickness=0)
+        self.imagenes_canvas.pack(side="left", fill="both", expand=True)
+        
+        self.imagenes_scrollbar = Scrollbar(self.panel_imagenes, command=self.imagenes_canvas.yview)
+        self.imagenes_scrollbar.pack(side="right", fill="y")
+        
+        self.imagenes_canvas.configure(yscrollcommand=self.imagenes_scrollbar.set)
+        
+        self.imagenes_frame = ctk.CTkFrame(self.imagenes_canvas, fg_color="transparent")
+        self.imagenes_canvas.create_window((0, 0), window=self.imagenes_frame, anchor="nw")
+        
+        self.imagenes_frame.bind("<Configure>", lambda e: self.imagenes_canvas.configure(scrollregion=self.imagenes_canvas.bbox("all")))
+        
+        ctk.CTkLabel(self.imagenes_frame, text="Images", font=("Arial", 14, "bold")).pack(pady=(10, 5), padx=10)
         
         self.actualizar_lista_mods()
 
@@ -428,7 +434,7 @@ class IsaacRimLauncher(ctk.CTk):
         
         items = os.listdir(mods_path)
         if not items:
-            self.lista_mods.insert("end", "No hay mods instalados")
+            self.lista_mods.insert("end", "No mods installed")
             return
         
         self.mod_seleccionado = None
@@ -439,6 +445,12 @@ class IsaacRimLauncher(ctk.CTk):
             if os.path.isdir(item_path):
                 self.lista_mods.insert("end", item)
                 self.mods_list.append(item)
+        
+        if self.mods_list:
+            self.lista_mods.selection_set(0)
+            self.lista_mods.see(0)
+            self.mod_seleccionado = self.mods_list[0]
+            self.mostrar_info_mod(self.mods_list[0])
     
     def procesar_zips_en_carpeta(self, mods_path):
         import tempfile
@@ -483,7 +495,7 @@ class IsaacRimLauncher(ctk.CTk):
                         print(f"Mod instalado y zip eliminado: {destino}")
                         
                 except Exception as e:
-                    print(f"Error procesando {item}: {e}")
+                    print(f"Error processing {item}: {e}")
     
     def on_mod_select(self, event):
         selection = self.lista_mods.curselection()
@@ -498,8 +510,7 @@ class IsaacRimLauncher(ctk.CTk):
         self.mod_seleccionado = nombre
         
         self.lbl_info_titulo.configure(text=nombre)
-        self.lbl_info_imagen.configure(image="", text="")
-        self.lbl_info_buscar.configure(text="Cargando...")
+        self.lbl_info_buscar.configure(text="Loading...")
         self.lbl_info_desc.configure(text="")
         self.lbl_info_autor.configure(text="")
         
@@ -508,7 +519,7 @@ class IsaacRimLauncher(ctk.CTk):
     def leer_metadata_local(self, nombre):
         import xml.etree.ElementTree as ET
         import re
-        from PIL import Image, ImageTk
+        from PIL import Image, ImageTk, ImageDraw
         
         mods_path = self.entry_mods.get()
         mod_path = os.path.join(mods_path, nombre)
@@ -544,7 +555,7 @@ class IsaacRimLauncher(ctk.CTk):
                         tags.append(tag_id)
                 
             except Exception as e:
-                print(f"Error leyendo metadata.xml: {e}")
+                print(f"Error reading metadata.xml: {e}")
         
         imagenes = []
         for file in os.listdir(mod_path):
@@ -557,34 +568,61 @@ class IsaacRimLauncher(ctk.CTk):
         
         info_text = ""
         if version:
-            info_text += f"Versión: {version}"
+            info_text += f"Version: {version}"
         if tags:
             info_text += f" | Tags: {', '.join(tags)}"
-        self.lbl_info_buscar.configure(text=info_text or "Sin metadata")
+        self.lbl_info_buscar.configure(text=info_text or "No metadata")
         self.lbl_info_desc.configure(text=descripcion)
         
         for widget in self.imagenes_frame.winfo_children():
             widget.destroy()
         
         if imagenes:
-            self.lbl_info_imagen.pack_forget()
             for img_path in imagenes:
                 try:
                     img = Image.open(img_path)
-                    img.thumbnail((320, 250), Image.Resampling.LANCZOS)
+                    img.thumbnail((400, 300), Image.Resampling.LANCZOS)
                     photo = ImageTk.PhotoImage(img)
                     lbl = ctk.CTkLabel(self.imagenes_frame, image=photo, text="")
                     lbl.image = photo
                     lbl.pack(pady=5)
                 except Exception as e:
-                    print(f"Error cargando imagen {img_path}: {e}")
+                    print(f"Error loading image {img_path}: {e}")
+            self.imagenes_frame.update_idletasks()
+            self.imagenes_canvas.configure(scrollregion=self.imagenes_canvas.bbox("all"))
         else:
-            self.lbl_info_imagen.pack(pady=10, padx=10)
-            self.lbl_info_imagen.configure(text="[Sin imagen]")
+            placeholder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "placeholder.svg")
+            photo = None
+            
+            if os.path.exists(placeholder_path):
+                try:
+                    import cairosvg
+                    png_data = cairosvg.svg2png(url=placeholder_path, output_width=400, output_height=300)
+                    from io import BytesIO
+                    img = Image.open(BytesIO(png_data))
+                    photo = ImageTk.PhotoImage(img)
+                except ImportError:
+                    print("cairosvg not installed, trying with PIL (won't work for SVG)")
+                except Exception as e:
+                    print(f"Error loading SVG placeholder: {e}")
+            
+            if not photo:
+                placeholder = Image.new('RGB', (400, 300), color='#2b2b2b')
+                draw = ImageDraw.Draw(placeholder)
+                try:
+                    draw.text((200, 150), "No images", fill="gray", anchor="mm")
+                except:
+                    pass
+                photo = ImageTk.PhotoImage(placeholder)
+            
+            if photo:
+                lbl = ctk.CTkLabel(self.imagenes_frame, image=photo, text="")
+                lbl.image = photo
+                lbl.pack(pady=20)
 
     def eliminar_mod_seleccionado(self):
         if not self.mod_seleccionado:
-            print("Selecciona un mod primero")
+            print("Select a mod first")
             return
         
         mods_path = self.entry_mods.get()
@@ -605,7 +643,7 @@ class IsaacRimLauncher(ctk.CTk):
                 print(f"Navegando a: {url}")
                 self.browser.load_url(url)
             except Exception as e:
-                print(f"Error navegando: {e}")
+                print(f"Error browsing: {e}")
                 try:
                     self.browser.load_website(url)
                 except Exception as e2:
@@ -640,7 +678,7 @@ class IsaacRimLauncher(ctk.CTk):
         self.navegar_url()
 
     def seleccionar_archivo(self):
-        filepath = filedialog.askopenfilename(title="Seleccionar archivo descargado", filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")])
+        filepath = filedialog.askopenfilename(title="Select downloaded file", filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")])
         
         if filepath:
             mods_path = self.entry_mods.get()
@@ -686,7 +724,7 @@ class IsaacRimLauncher(ctk.CTk):
                 print(f"Mod instalado en: {destino}")
                 self.actualizar_lista_mods()
             except Exception as e:
-                print(f"Error instalando mod: {e}")
+                print(f"Error installing mod: {e}")
     
     def buscar_nombre_en_metadata(self, folder):
         import re
@@ -713,5 +751,5 @@ class IsaacRimLauncher(ctk.CTk):
         return None
 
 if __name__ == "__main__":
-    app = IsaacRimLauncher()
+    app = PyIsaacLauncher()
     app.mainloop()

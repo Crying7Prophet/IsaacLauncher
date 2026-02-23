@@ -3,3 +3,4 @@ tkinterweb
 tkinterweb-tkhtml-extras
 requests
 Pillow
+cairosvg

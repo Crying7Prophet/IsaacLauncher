@@ -1,10 +1,10 @@
-# 🛠️ IsaacRim Mod Manager
+# 🛠️ PyIsaac Launcher
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-CustomTkinter-orange)
 ![Game](https://img.shields.io/badge/Game-The_Binding_of_Isaac-red)
 
-**IsaacRim** is a mod manager for *The Binding of Isaac: Repentance* built in Python. Features an integrated browser for browsing mod sites and automatic installation.
+**PyIsaac Launcher** is a mod manager for *The Binding of Isaac: Repentance* built in Python. Features an integrated browser for browsing mod sites and automatic installation.
 
 ---
 
