@@ -14,7 +14,7 @@
 
 ## About
 
-**PyIsaac Launcher** is a modern mod manager for *The Binding of Isaac: Repentance* built in Python. It features an integrated browser for browsing mod sites directly within the app and provides seamless mod installation.
+**PyIsaac Launcher** is a modern mod manager for *The Binding of Isaac: Repentance+* built in Python. It features an integrated browser for browsing mod sites directly within the app and provides seamless mod installation.
 
 ---
 
