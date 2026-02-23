@@ -40,6 +40,7 @@ def cargar_config():
 class IsaacRimLauncher(ctk.CTk):
     def __init__(self):
         super().__init__()
+        
         self.config = cargar_config()
         
         self.title("IsaacRim Mod Manager v1.0")
@@ -382,91 +383,39 @@ class IsaacRimLauncher(ctk.CTk):
         self.panel_info = ctk.CTkFrame(mods_container)
         self.panel_info.pack(side="right", fill="both", expand=True)
         
-        self.lbl_info_titulo = ctk.CTkLabel(self.panel_info, text="Selecciona un mod", font=("Arial", 16, "bold"))
+        from tkinter import Canvas, Scrollbar
+        self.info_canvas = Canvas(self.panel_info, bg="#2b2b2b", highlightthickness=0)
+        self.info_canvas.pack(side="left", fill="both", expand=True)
+        
+        self.info_scrollbar = Scrollbar(self.panel_info, command=self.info_canvas.yview)
+        self.info_scrollbar.pack(side="right", fill="y")
+        
+        self.info_canvas.configure(yscrollcommand=self.info_scrollbar.set)
+        
+        self.info_content = ctk.CTkFrame(self.info_canvas, fg_color="transparent")
+        self.info_canvas.create_window((0, 0), window=self.info_content, anchor="nw")
+        
+        self.info_content.bind("<Configure>", lambda e: self.info_canvas.configure(scrollregion=self.info_canvas.bbox("all")))
+        
+        self.lbl_info_titulo = ctk.CTkLabel(self.info_content, text="Selecciona un mod", font=("Arial", 16, "bold"))
         self.lbl_info_titulo.pack(pady=(20, 10), padx=10)
         
-        self.lbl_info_imagen = ctk.CTkLabel(self.panel_info, text="")
+        self.lbl_info_imagen = ctk.CTkLabel(self.info_content, text="")
         self.lbl_info_imagen.pack(pady=10, padx=10)
         
-        self.lbl_info_buscar = ctk.CTkLabel(self.panel_info, text="Buscando automáticamente...", text_color="gray")
+        self.lbl_info_buscar = ctk.CTkLabel(self.info_content, text="Cargando...", text_color="gray")
         self.lbl_info_buscar.pack(pady=5, padx=10)
         
-        self.lbl_info_desc = ctk.CTkLabel(self.panel_info, text="", wraplength=300, justify="left")
+        self.lbl_info_desc = ctk.CTkLabel(self.info_content, text="", wraplength=320, justify="left")
         self.lbl_info_desc.pack(pady=10, padx=10)
         
-        self.lbl_info_autor = ctk.CTkLabel(self.panel_info, text="")
+        self.lbl_info_autor = ctk.CTkLabel(self.info_content, text="")
         self.lbl_info_autor.pack(pady=5, padx=10)
         
+        self.imagenes_frame = ctk.CTkFrame(self.info_content, fg_color="transparent")
+        self.imagenes_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
         self.actualizar_lista_mods()
-
-    def buscar_info_mod(self, mod_id):
-        if not mod_id:
-            return
-        
-        self.lbl_info_titulo.configure(text="Buscando...")
-        self.update()
-        
-        self.buscar_info_mod_por_id(mod_id)
-
-    def buscar_info_mod_por_id(self, mod_id):
-        self.lbl_info_buscar.configure(text=f"ID: {mod_id}")
-        
-        try:
-            url = f"https://steamcommunity.com/sharedfiles/filedetails/?id={mod_id}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                html = response.text
-                
-                import re
-                
-                title_match = re.search(r'<div class="workshopItemTitle">([^<]+)</div>', html)
-                title = title_match.group(1) if title_match else "Título no encontrado"
-                
-                author_match = re.search(r'<div class="workshopItemAuthor">[^:]+: <a[^>]*>([^<]+)</a>', html)
-                author = author_match.group(1) if author_match else "Autor desconocido"
-                
-                desc_match = re.search(r'<div class="workshopItemDescription">(.+?)</div>', html, re.DOTALL)
-                description = desc_match.group(1) if desc_match else ""
-                description = re.sub(r'<[^>]+>', '', description)[:500]
-                
-                img_match = re.search(r'https://steamuserimages-a\.akamaihd\.net/ugc/(\d+)/(\w+)', html)
-                
-                self.lbl_info_titulo.configure(text=title)
-                self.lbl_info_autor.configure(text=f"Autor: {author}")
-                self.lbl_info_desc.configure(text=description)
-                
-                if img_match:
-                    img_url = f"https://steamuserimages-a.akamaihd.net/ugc/{img_match.group(1)}/{img_match.group(2)}"
-                    self.descargar_y_mostrar_imagen(img_url)
-                else:
-                    self.lbl_info_imagen.configure(text="[Sin imagen]")
-            else:
-                self.lbl_info_titulo.configure(text="Mod no encontrado")
-        except Exception as e:
-            self.lbl_info_titulo.configure(text=f"Error: {str(e)[:50]}")
-            print(f"Error buscando mod: {e}")
-
-    def descargar_y_mostrar_imagen(self, url):
-        try:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                import base64
-                from PIL import Image, ImageTk
-                import io
-                
-                img_data = response.content
-                image = Image.open(io.BytesIO(img_data))
-                image.thumbnail((300, 300))
-                self.imagen_tk = ImageTk.PhotoImage(image)
-                self.lbl_info_imagen.configure(image=self.imagen_tk, text="")
-            else:
-                self.lbl_info_imagen.configure(text="[Error de imagen]")
-        except Exception as e:
-            self.lbl_info_imagen.configure(text=f"[Error: {str(e)[:30]}]")
-            print(f"Error imagen: {e}")
 
     def actualizar_lista_mods(self):
         mods_path = self.entry_mods.get()
@@ -550,50 +499,88 @@ class IsaacRimLauncher(ctk.CTk):
         
         self.lbl_info_titulo.configure(text=nombre)
         self.lbl_info_imagen.configure(image="", text="")
-        self.lbl_info_buscar.configure(text="Buscando automáticamente...")
+        self.lbl_info_buscar.configure(text="Cargando...")
         self.lbl_info_desc.configure(text="")
         self.lbl_info_autor.configure(text="")
         
-        import threading
-        threading.Thread(target=self.buscar_mod_por_nombre, args=(nombre,), daemon=True).start()
+        self.leer_metadata_local(nombre)
 
-    def buscar_mod_por_nombre(self, nombre_mod):
-        try:
-            search_url = "https://steamcommunity.com/app/250900/workshop/browse/"
-            params = {"query": nombre_mod, "numperpage": "10"}
-            headers = {"User-Agent": "Mozilla/5.0"}
-            
-            response = requests.get(search_url, params=params, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                html = response.text
-                import re
+    def leer_metadata_local(self, nombre):
+        import xml.etree.ElementTree as ET
+        import re
+        from PIL import Image, ImageTk
+        
+        mods_path = self.entry_mods.get()
+        mod_path = os.path.join(mods_path, nombre)
+        
+        metadata_file = os.path.join(mod_path, "metadata.xml")
+        
+        titulo = nombre
+        descripcion = ""
+        autor = ""
+        version = ""
+        tags = []
+        
+        if os.path.exists(metadata_file):
+            try:
+                tree = ET.parse(metadata_file)
+                root = tree.getroot()
                 
-                matches = re.findall(r'filedetails/\?id=(\d+)">([^<]+)</a>', html)
+                name_elem = root.find("name")
+                if name_elem is not None:
+                    titulo = name_elem.text or nombre
                 
-                mejor_match = None
-                nombre_clean = nombre_mod.lower().replace("workshop_", "").replace("_", " ").strip()
+                desc_elem = root.find("description")
+                if desc_elem is not None and desc_elem.text:
+                    descripcion = desc_elem.text.strip()[:500]
                 
-                for mod_id, titulo in matches:
-                    titulo_clean = titulo.lower().strip()
-                    if nombre_clean in titulo_clean or titulo_clean in nombre_clean:
-                        mejor_match = (mod_id, titulo)
-                        break
+                version_elem = root.find("version")
+                if version_elem is not None and version_elem.text:
+                    version = version_elem.text
                 
-                if mejor_match:
-                    mod_id, titulo = mejor_match
-                    self.after(0, lambda m=mod_id, t=titulo: self.mostrar_info_mod_por_id(m, t))
-                else:
-                    self.after(0, lambda: self.lbl_info_buscar.configure(text="No se encontró en Steam"))
-            else:
-                self.after(0, lambda: self.lbl_info_buscar.configure(text="Error de conexión"))
-        except Exception as e:
-            self.after(0, lambda: self.lbl_info_buscar.configure(text=f"Error: {str(e)[:30]}"))
-
-    def mostrar_info_mod_por_id(self, mod_id, titulo):
-        self.lbl_info_buscar.configure(text=f"ID: {mod_id}")
+                for tag in root.findall("tag"):
+                    tag_id = tag.get("id")
+                    if tag_id:
+                        tags.append(tag_id)
+                
+            except Exception as e:
+                print(f"Error leyendo metadata.xml: {e}")
+        
+        imagenes = []
+        for file in os.listdir(mod_path):
+            if os.path.isfile(os.path.join(mod_path, file)):
+                ext = os.path.splitext(file)[1].lower()
+                if ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]:
+                    imagenes.append(os.path.join(mod_path, file))
+        
         self.lbl_info_titulo.configure(text=titulo)
-        self.buscar_info_mod_por_id(mod_id)
+        
+        info_text = ""
+        if version:
+            info_text += f"Versión: {version}"
+        if tags:
+            info_text += f" | Tags: {', '.join(tags)}"
+        self.lbl_info_buscar.configure(text=info_text or "Sin metadata")
+        self.lbl_info_desc.configure(text=descripcion)
+        
+        for widget in self.imagenes_frame.winfo_children():
+            widget.destroy()
+        
+        if imagenes:
+            self.lbl_info_imagen.pack_forget()
+            for img_path in imagenes:
+                try:
+                    img = Image.open(img_path)
+                    img.thumbnail((320, 250), Image.Resampling.LANCZOS)
+                    photo = ImageTk.PhotoImage(img)
+                    lbl = ctk.CTkLabel(self.imagenes_frame, image=photo, text="")
+                    lbl.image = photo
+                    lbl.pack(pady=5)
+                except Exception as e:
+                    print(f"Error cargando imagen {img_path}: {e}")
+        else:
+            self.lbl_info_imagen.pack(pady=10, padx=10)
+            self.lbl_info_imagen.configure(text="[Sin imagen]")
 
     def eliminar_mod_seleccionado(self):
         if not self.mod_seleccionado:
