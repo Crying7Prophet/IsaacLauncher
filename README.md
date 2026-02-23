@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.svg" alt="PyIsaac Launcher" width="200" />
   
-  ### A mod manager for The Binding of Isaac: Repentance
+  ### A mod manager for The Binding of Isaac: Repentance+
 
   ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
   ![UI](https://img.shields.io/badge/UI-CustomTkinter-orange)
