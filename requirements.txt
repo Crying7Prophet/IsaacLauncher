@@ -1,6 +1,4 @@
-customtkinter
-tkinterweb
-tkinterweb-tkhtml-extras
+PyQt6
+PyQt6-WebEngine
 requests
 Pillow
-cairosvg

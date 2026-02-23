@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="assets/logo.svg" alt="PyIsaac Launcher" width="200" />
+  <img src="assets/logo.svg" alt="PyIsaac Launcher" width="300" />
   
   ### A mod manager for The Binding of Isaac: Repentance+
 
   ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
-  ![UI](https://img.shields.io/badge/UI-CustomTkinter-orange)
+  ![UI](https://img.shields.io/badge/UI-PyQt6-orange)
   ![License](https://img.shields.io/badge/License-MIT-green)
   ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgray)
 
@@ -25,7 +25,7 @@
 | **Integrated Browser** | Navigate Steam Workshop, NexusMods, ModDB, and Modding of Isaac without leaving the app |
 | **Mod Management** | View installed mods with metadata and images fetched automatically from Steam |
 | **Direct Downloads** | Download mods by Steam Workshop ID or URL |
-| **Modern UI** | Sleek dark theme built with CustomTkinter |
+| **Modern UI** | Sleek dark theme built with PyQt6 |
 | **Cross-Platform** | Works on Windows and Linux |
 
 ---
@@ -35,27 +35,34 @@
 ### Prerequisites
 
 - Python 3.10 or higher (3.11+ recommended)
-- System dependencies for CairoSVG:
-  - **Windows**: [GTK3 runtime](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Builder/releases)
-  - **Linux**: `libcairo2-dev`, `libgirepository1.0-dev`, `python3-dev`
+- System dependencies for PyQt6 WebEngine:
+
+#### Linux (Ubuntu/Debian)
+```bash
+sudo apt install libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+    libxcb-render-util0 libxcb-shape0 libegl1 libopengl0 libxkbcommon0 \
+    libxcb-xinerama0 libxcb-xfixes0
+```
+
+#### Linux (Fedora)
+```bash
+sudo dnf install xcb-util-cursor xcb-util-image xcb-util-keysyms \
+    xcb-util-renderutil xcb-util-xkbutils
+```
+
+#### Linux (Arch)
+```bash
+sudo pacman -S qt6-base
+```
+
+#### Windows
+No additional dependencies required (install PyQt6-WebEngine via pip)
 
 ### Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/IsaacLauncher.git
-cd IsaacLauncher
-
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the application
-python main.py
+# Run setup script (installs system + python dependencies)
+python setup.py
 ```
 
 ---
@@ -82,11 +89,10 @@ python main.py
 
 ## Dependencies
 
-- [customtkinter](https://github.com/TomSchimansky/CustomTkinter) - Modern Tkinter widgets
-- [tkinterweb](https://github.com/Andereoo/TkinterWeb) - HTML renderer for Tkinter
+- [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) - GUI framework
+- [PyQt6-WebEngine](https://www.riverbankcomputing.com/software/pyqtwebengine/) - Chromium-based browser
 - [requests](https://docs.python-requests.org/) - HTTP library
 - [Pillow](https://python-pillow.org/) - Image processing
-- [cairosvg](https://cairosvg.org/) - SVG rendering
 
 ---
 

@@ -1,6 +1,4 @@
-import customtkinter as ctk
-from tkinterweb import HtmlFrame 
-from PIL import Image
+import sys
 import os
 import json
 import subprocess
@@ -8,9 +6,19 @@ import shutil
 import zipfile
 import requests
 import threading
-from tkinter import filedialog
+import re
+import tempfile
 
-import sys
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+    QTabWidget, QFrame, QLabel, QPushButton, QLineEdit, QListWidget,
+    QScrollArea, QFileDialog, QMessageBox, QGridLayout, QSizePolicy
+)
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile
+from PyQt6.QtSvgWidgets import QSvgWidget
+from PyQt6.QtCore import QUrl, Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QIcon, QPixmap, QImage, QColor
 
 IS_LINUX = sys.platform.startswith("linux")
 
@@ -38,196 +46,99 @@ def cargar_config():
     with open(config_file, "r") as f:
         return json.load(f)
 
-class PyIsaacLauncher(ctk.CTk):
-    def __init__(self):
+class DescargaThread(QThread):
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+    progress = pyqtSignal(str)
+    
+    def __init__(self, mod_id, config):
         super().__init__()
-        
-        self.config = cargar_config()
-        
-        self.title("PyIsaac Launcher v1.0")
-        self.geometry("1100x600")
-        ctk.set_appearance_mode("dark")
-
-        self.main_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_container.pack(fill="both", expand=True, padx=5, pady=(5, 0))
-
-        self.tabview = ctk.CTkTabview(self.main_container)
-        self.tabview.pack(side="left", fill="both", expand=True)
-        self.tabview.add("Browser")
-        self.tabview.add("Mods")
-        self.tabview.add("About")
-        
-        self.update()
-        
-        self.tabview.set("Mods")
-
-        self.header = ctk.CTkFrame(self, height=60)
-        self.header.pack(fill="x", padx=5, pady=5, side="bottom")
-        
-        self.btn_run = ctk.CTkButton(self.header, text="🎮 Run Game", fg_color="#2d5a27", height=40, command=self.ejecutar_isaac)
-        self.btn_run.pack(side="right", padx=5, pady=5)
-        
-        self.entry_mods, _ = self.crear_input_ruta("Mods:", self.config["isaac_mods_path"], is_folder=True)
-        self.entry_isaac, _ = self.crear_input_ruta("Game:", self.config["isaac_exe_path"], is_file=True)
-        
-        self.setup_browser_tab()
-        self.setup_mods_tab()
-        self.setup_about_tab()
-
-    def crear_input_ruta(self, etiqueta, valor, is_file=False, is_folder=False):
-        frame = ctk.CTkFrame(self.header, fg_color="transparent")
-        frame.pack(fill="x", pady=2)
-        ctk.CTkLabel(frame, text=etiqueta, width=120, anchor="w").pack(side="left", padx=5)
-        
-        entry = ctk.CTkEntry(frame)
-        entry.insert(0, valor)
-        entry.pack(side="left", fill="x", expand=True, padx=5)
-        
-        def browse_path():
-            if is_file:
-                path = filedialog.askopenfilename(title=f"Select {etiqueta}")
-            elif is_folder:
-                path = filedialog.askdirectory(title=f"Select {etiqueta}")
-            else:
-                path = None
-            if path:
-                entry.delete(0, "end")
-                entry.insert(0, path)
-                self.guardar_config()
-        
-        ctk.CTkButton(frame, text="📁", width=40, command=browse_path).pack(side="left", padx=2)
-        
-        return entry, None
+        self.mod_id = mod_id
+        self.config = config
     
-    def guardar_config(self):
-        self.config["isaac_mods_path"] = self.entry_mods.get() if self.entry_mods else ""
-        self.config["isaac_exe_path"] = self.entry_isaac.get() if self.entry_isaac else ""
-        with open("config.json", "w") as f:
-            json.dump(self.config, f, indent=4)
-    
-    def ejecutar_isaac(self):
-        isaac_exe = self.entry_isaac.get()
-        if isaac_exe and os.path.exists(isaac_exe):
-            if IS_LINUX and not os.access(isaac_exe, os.X_OK):
-                os.chmod(isaac_exe, 0o755)
-            if IS_LINUX:
-                exe_dir = os.path.dirname(isaac_exe)
-                subprocess.Popen(["wine", os.path.basename(isaac_exe)], cwd=exe_dir)
-            else:
-                subprocess.Popen([isaac_exe])
-        else:
-            print("Error: Game executable not found.")
-    
-    def descargar_por_id(self):
-        mod_id = self.mod_id_entry.get().strip()
-        if not mod_id:
-            print("Error: Enter a mod ID")
-            return
-        
-        if not mod_id.isdigit():
-            print("Error: ID must be numbers only")
-            return
-        
-        threading.Thread(target=self._descarga_steamcmd, args=(mod_id,), daemon=True).start()
-    
-    def _descarga_steamcmd(self, mod_id):
-        self.btn_descarga_directa.configure(state="disabled", text="Bajando...")
+    def run(self):
         try:
-            temp_dir = os.path.abspath(self.config["temp_download_path"])
+            temp_dir = os.path.abspath("temp_downloads")
             os.makedirs(temp_dir, exist_ok=True)
             
+            steamcmd_path = self.config.get("steamcmd_path", "steamcmd")
+            
             comando = [
-                self.config["steamcmd_path"],
+                steamcmd_path,
                 "+force_install_dir", temp_dir,
                 "+login", "anonymous",
-                "+workshop_download_item", "250900", mod_id,
+                "+workshop_download_item", "250900", self.mod_id,
                 "+quit"
             ]
             
             subprocess.run(comando, check=True, capture_output=True)
             
-            origen = os.path.join(temp_dir, "steamapps", "workshop", "content", "250900", mod_id)
-            destino = os.path.join(self.config["isaac_mods_path"], f"workshop_{mod_id}")
+            origen = os.path.join(temp_dir, "steamapps", "workshop", "content", "250900", self.mod_id)
+            destino = os.path.join(self.config["isaac_mods_path"], f"workshop_{self.mod_id}")
             
             if os.path.exists(origen):
                 if os.path.exists(destino):
                     shutil.rmtree(destino)
                 shutil.copytree(origen, destino)
-                print(f"¡Mod {mod_id} instalado con éxito!")
+                self.finished.emit(f"Mod {self.mod_id} instalado con éxito!")
             else:
-                print("SteamCMD terminó pero no se encontraron los archivos.")
+                self.error.emit("SteamCMD terminó pero no se encontraron los archivos.")
         except Exception as e:
-                print(f"Error in process: {e}")
-        finally:
-            self.btn_descarga_directa.configure(state="normal", text="INSTALAR")
+            self.error.emit(f"Error: {e}")
 
-    def descargar_desde_smods(self):
-        url_or_id = self.mod_id_entry.get().strip()
-        
-        if not url_or_id:
-            print("Enter a Smods URL or mod ID")
-            return
-        
-        if "catalogue.smods.ru/archives/" in url_or_id:
-            url = url_or_id
-        elif url_or_id.isdigit():
-            url = f"https://catalogue.smods.ru/archives/{url_or_id}"
-        else:
-            print("Invalid URL. Use a Smods URL or mod ID")
-            return
-        
-        threading.Thread(target=self._descarga_smods_thread, args=(url,), daemon=True).start()
+class SmodsThread(QThread):
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+    progress = pyqtSignal(str)
     
-    def _descarga_smods_thread(self, url):
-        self.btn_descarga_directa.configure(state="disabled", text="Searching...")
+    def __init__(self, url_or_id, config):
+        super().__init__()
+        self.url_or_id = url_or_id
+        self.config = config
+    
+    def run(self):
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
+            url_or_id = self.url_or_id.strip()
             
+            if "catalogue.smods.ru/archives/" in url_or_id:
+                url = url_or_id
+            elif url_or_id.isdigit():
+                url = f"https://catalogue.smods.ru/archives/{url_or_id}"
+            else:
+                self.error.emit("URL inválida")
+                return
+            
+            headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
             
-            import re
             download_match = re.search(r'href="(https?://[^"]+\.zip[^"]*)"', response.text)
-            
             if not download_match:
                 download_match = re.search(r'class="skymods-excerpt-btn"[^>]*href="([^"]+)"', response.text)
             
             if not download_match:
-                print("No se encontró enlace de descarga en la página")
-                self.btn_descarga_directa.configure(state="normal", text="Download from Smods")
+                self.error.emit("No se encontró enlace de descarga")
                 return
             
             download_url = download_match.group(1)
-            print(f"Download URL: {download_url}")
+            self.progress.emit("Descargando...")
             
-            self.btn_descarga_directa.configure(state="disabled", text="Downloading...")
-            
-            temp_dir = os.path.abspath(self.config["temp_download_path"])
+            temp_dir = os.path.abspath("temp_downloads")
             os.makedirs(temp_dir, exist_ok=True)
             
-            filename = "mod.zip"
-            filepath = os.path.join(temp_dir, filename)
+            filepath = os.path.join(temp_dir, "mod.zip")
             
             response = requests.get(download_url, headers=headers, stream=True, timeout=120)
             response.raise_for_status()
-            
-            total_size = int(response.headers.get('content-length', 0))
-            downloaded = 0
             
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
-                        downloaded += len(chunk)
-            
-            print(f"Download completed: {filepath}")
             
             mods_path = self.config["isaac_mods_path"]
             os.makedirs(mods_path, exist_ok=True)
             
-            import tempfile
             with tempfile.TemporaryDirectory() as temp_extract:
                 with zipfile.ZipFile(filepath, 'r') as zip_ref:
                     zip_ref.extractall(temp_extract)
@@ -243,107 +154,410 @@ class PyIsaacLauncher(ctk.CTk):
                 
                 if nombre_oficial:
                     destino = os.path.join(mods_path, nombre_oficial)
-                    print(f"Nombre oficial del mod: {nombre_oficial}")
-                else:
-                    destino = None
-                    print("No se encontró nombre en metadata, usa nombre manual")
-                
-                if destino:
-                    if os.path.exists(destino):
-                        shutil.rmtree(destino)
-                    shutil.copytree(carpeta_extraida, destino)
                 else:
                     destino = os.path.join(mods_path, "mod_sin_nombre")
-                    if os.path.exists(destino):
-                        shutil.rmtree(destino)
-                    shutil.copytree(carpeta_extraida, destino)
+                
+                if os.path.exists(destino):
+                    shutil.rmtree(destino)
+                shutil.copytree(carpeta_extraida, destino)
             
-            print(f"Mod instalado en: {destino}")
-            self.actualizar_lista_mods()
+            os.remove(filepath)
+            self.finished.emit(f"Mod instalado en: {destino}")
             
         except Exception as e:
-            print(f"Error: {e}")
-        finally:
-            self.btn_descarga_directa.configure(state="normal", text="Download from Smods")
+            self.error.emit(f"Error: {e}")
+    
+    def buscar_nombre_en_metadata(self, folder):
+        for root, dirs, files in os.walk(folder):
+            for file in files:
+                if file in ["metadata.xml", "metadata.txt", "info.xml", "info.txt"]:
+                    filepath = os.path.join(root, file)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        match = re.search(r'<name>([^<]+)</name>', content, re.IGNORECASE)
+                        if match:
+                            return match.group(1).strip()
+                        match = re.search(r'^Name\s*=\s*(.+)$', content, re.MULTILINE | re.IGNORECASE)
+                        if match:
+                            return match.group(1).strip()
+                    except:
+                        pass
+        return None
 
-    def setup_about_tab(self):
-        tab = self.tabview.tab("About")
+class PyIsaacLauncher(QMainWindow):
+    def __init__(self):
+        super().__init__()
         
-        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.svg")
-        logo_photo = None
+        self.config = cargar_config()
+        self.zoom_level = 1.0
+        self.mod_seleccionado = None
+        self.mods_list = []
+        self.entry_mods = None
+        self.entry_isaac = None
+        self.url_entry = None
+        self.browser = None
+        self.lbl_zoom = None
         
-        if os.path.exists(logo_path):
-            try:
-                import cairosvg
-                from io import BytesIO
-                png_data = cairosvg.svg2png(url=logo_path, output_width=120, output_height=120)
-                img = Image.open(BytesIO(png_data))
-                from PIL import ImageTk
-                logo_photo = ImageTk.PhotoImage(img)
-            except ImportError:
-                print("cairosvg not installed")
-            except Exception as e:
-                print(f"Error loading SVG logo: {e}")
+        self.setWindowTitle("PyIsaac Launcher v1.0")
+        self.setGeometry(100, 100, 1100, 650)
         
-        if logo_photo:
-            lbl = ctk.CTkLabel(tab, image=logo_photo, text="")
-            lbl.image = logo_photo
-            lbl.pack(pady=0)
+        self.setup_ui()
         
-        ctk.CTkLabel(tab, text="PyIsaac Launcher", font=("Arial", 20, "bold")).pack(pady=0)
-        ctk.CTkLabel(tab, text="Version 1.0", font=("Arial", 14)).pack()
+    def setup_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
         
-        ctk.CTkLabel(tab, text="A mod manager for\nThe Binding of Isaac: Repentance", justify="center").pack(pady=5)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        ctk.CTkLabel(tab, text="Features:", font=("Arial", 12, "bold")).pack(pady=(5, 2))
-        features = [
-            "• Integrated browser for mod sites",
-            "• Automatic metadata from Steam",
-            "• Easy mod installation",
-            "• Modern dark UI"
-        ]
-        for f in features:
-            ctk.CTkLabel(tab, text=f, justify="left").pack()
-
+        self.setup_header(main_layout)
+        
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: none;
+                background-color: #1e1e1e;
+            }
+            QTabBar::tab {
+                background-color: #2d2d2d;
+                color: #aaaaaa;
+                padding: 10px 20px;
+                border: none;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background-color: #1e1e1e;
+                color: #ffffff;
+            }
+            QTabBar::tab:hover {
+                background-color: #3d3d3d;
+            }
+        """)
+        main_layout.addWidget(self.tab_widget)
+        
+        self.tab_browser = QWidget()
+        self.tab_browser.setStyleSheet("background-color: #1e1e1e;")
+        self.tab_mods = QWidget()
+        self.tab_mods.setStyleSheet("background-color: #1e1e1e;")
+        self.tab_about = QWidget()
+        self.tab_about.setStyleSheet("background-color: #1e1e1e;")
+        
+        self.tab_widget.addTab(self.tab_browser, "Browser")
+        self.tab_widget.addTab(self.tab_mods, "Mods")
+        self.tab_widget.addTab(self.tab_about, "About")
+        
+        self.setup_browser_tab()
+        self.setup_mods_tab()
+        self.setup_about_tab()
+        
+        self.tab_widget.setCurrentIndex(1)
+        
+    def setup_header(self, main_layout):
+        header_frame = QFrame()
+        header_frame.setStyleSheet("""
+            background-color: #252525;
+            border-bottom: 1px solid #3d3d3d;
+            padding: 10px;
+        """)
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setSpacing(15)
+        
+        self.entry_mods = QLineEdit()
+        self.entry_mods.setText(self.config.get("isaac_mods_path", get_default_mods_path()))
+        self.entry_mods.setPlaceholderText("Mods path...")
+        self.entry_mods.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                padding: 6px 10px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #1f538d;
+            }
+        """)
+        
+        btn_browse_mods = QPushButton("📁")
+        btn_browse_mods.setFixedWidth(40)
+        btn_browse_mods.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """)
+        btn_browse_mods.clicked.connect(self.browse_mods_path)
+        
+        self.entry_isaac = QLineEdit()
+        self.entry_isaac.setText(self.config.get("isaac_exe_path", get_default_exe_path()))
+        self.entry_isaac.setPlaceholderText("Game executable...")
+        self.entry_isaac.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                padding: 6px 10px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #1f538d;
+            }
+        """)
+        
+        btn_browse_isaac = QPushButton("📁")
+        btn_browse_isaac.setFixedWidth(40)
+        btn_browse_isaac.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """)
+        btn_browse_isaac.clicked.connect(self.browse_isaac_path)
+        
+        self.btn_run = QPushButton("🎮 Run Game")
+        self.btn_run.setStyleSheet("""
+            QPushButton {
+                background-color: #2d5a27;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #3d7a37;
+            }
+        """)
+        self.btn_run.clicked.connect(self.ejecutar_isaac)
+        
+        label_mods = QLabel("Mods:")
+        label_mods.setStyleSheet("color: #aaaaaa; font-weight: bold;")
+        label_game = QLabel("Game:")
+        label_game.setStyleSheet("color: #aaaaaa; font-weight: bold;")
+        
+        header_layout.addWidget(label_mods)
+        header_layout.addWidget(self.entry_mods)
+        header_layout.addWidget(btn_browse_mods)
+        header_layout.addWidget(label_game)
+        header_layout.addWidget(self.entry_isaac)
+        header_layout.addWidget(btn_browse_isaac)
+        header_layout.addWidget(self.btn_run)
+        
+        main_layout.addWidget(header_frame)
+        
+    def browse_mods_path(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Mods Folder")
+        if path:
+            self.entry_mods.setText(path)
+            self.guardar_config()
+            self.actualizar_lista_mods()
+    
+    def browse_isaac_path(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select Game Executable", "", "Executable (*.exe)")
+        if path:
+            self.entry_isaac.setText(path)
+            self.guardar_config()
+    
+    def guardar_config(self):
+        self.config["isaac_mods_path"] = self.entry_mods.text()
+        self.config["isaac_exe_path"] = self.entry_isaac.text()
+        with open("config.json", "w") as f:
+            json.dump(self.config, f, indent=4)
+    
+    def ejecutar_isaac(self):
+        isaac_exe = self.entry_isaac.text()
+        if isaac_exe and os.path.exists(isaac_exe):
+            if IS_LINUX and not os.access(isaac_exe, os.X_OK):
+                os.chmod(isaac_exe, 0o755)
+            if IS_LINUX:
+                exe_dir = os.path.dirname(isaac_exe)
+                subprocess.Popen(["wine", os.path.basename(isaac_exe)], cwd=exe_dir)
+            else:
+                subprocess.Popen([isaac_exe])
+        else:
+            QMessageBox.warning(self, "Error", "Game executable not found.")
+    
     def setup_browser_tab(self):
-        tab = self.tabview.tab("Browser")
+        layout = QVBoxLayout(self.tab_browser)
+        layout.setContentsMargins(0, 0, 0, 0)
         
-        nav_bar = ctk.CTkFrame(tab, height=50)
-        nav_bar.pack(fill="x", padx=5, pady=5)
+        nav_bar = QFrame()
+        nav_bar.setStyleSheet("background-color: #252525; padding: 8px;")
+        nav_bar_layout = QHBoxLayout(nav_bar)
+        nav_bar_layout.setSpacing(8)
         
-        ctk.CTkButton(nav_bar, text="←", width=40, command=self.atras).pack(side="left", padx=2)
-        ctk.CTkButton(nav_bar, text="→", width=40, command=self.adelante).pack(side="left", padx=2)
-        ctk.CTkButton(nav_bar, text="⟳", width=40, command=self.recargar).pack(side="left", padx=2)
+        btn_style = """
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """
         
-        self.url_entry = ctk.CTkEntry(nav_bar, placeholder_text="Enter a URL...")
-        self.url_entry.pack(side="left", fill="x", expand=True, padx=5)
-        self.url_entry.bind("<Return>", lambda e: self.navegar_url())
+        btn_back = QPushButton("←")
+        btn_back.setFixedWidth(40)
+        btn_back.setStyleSheet(btn_style)
+        btn_back.clicked.connect(self.atras)
         
-        ctk.CTkButton(nav_bar, text="Go", width=60, command=self.navegar_url).pack(side="left", padx=2)
+        btn_forward = QPushButton("→")
+        btn_forward.setFixedWidth(40)
+        btn_forward.setStyleSheet(btn_style)
+        btn_forward.clicked.connect(self.adelante)
         
-        ctk.CTkButton(nav_bar, text="−", width=35, command=self.zoom_out).pack(side="left", padx=(10, 2))
-        ctk.CTkButton(nav_bar, text="+", width=35, command=self.zoom_in).pack(side="left", padx=2)
-
-        self.lbl_zoom = ctk.CTkLabel(nav_bar, text="100%", width=50)
-        self.lbl_zoom.pack(side="left", padx=5)
-
-        download_bar = ctk.CTkFrame(tab, height=45)
-        download_bar.pack(fill="x", padx=5, pady=(0, 5))
+        btn_reload = QPushButton("⟳")
+        btn_reload.setFixedWidth(40)
+        btn_reload.setStyleSheet(btn_style)
+        btn_reload.clicked.connect(self.recargar)
         
-        ctk.CTkLabel(download_bar, text="Direct download (Steam ID):", font=("Arial", 11, "bold")).pack(side="left", padx=5)
+        self.url_entry = QLineEdit()
+        self.url_entry.setPlaceholderText("Enter a URL...")
+        self.url_entry.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                padding: 6px 10px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #1f538d;
+            }
+        """)
+        self.url_entry.returnPressed.connect(self.navegar_url)
         
-        self.mod_id_entry = ctk.CTkEntry(download_bar, placeholder_text="Mod ID or URL", width=200)
-        self.mod_id_entry.pack(side="left", padx=5)
+        btn_go = QPushButton("Go")
+        btn_go.setFixedWidth(60)
+        btn_go.setStyleSheet("""
+            QPushButton {
+                background-color: #1f538d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2a6fbd;
+            }
+        """)
+        btn_go.clicked.connect(self.navegar_url)
         
-        self.btn_descarga_directa = ctk.CTkButton(download_bar, text="Download", fg_color="#1f538d", command=self.descargar_por_id)
-        self.btn_descarga_directa.pack(side="left", padx=5)
+        btn_zoom_out = QPushButton("−")
+        btn_zoom_out.setFixedWidth(35)
+        btn_zoom_out.setStyleSheet(btn_style)
+        btn_zoom_out.clicked.connect(self.zoom_out)
         
-        ctk.CTkButton(download_bar, text="Desde Smods", fg_color="#2d5a27", command=self.descargar_desde_smods).pack(side="left", padx=5)
-
-        shortcuts_bar = ctk.CTkFrame(tab)
-        shortcuts_bar.pack(fill="x", padx=5, pady=(0, 5))
+        btn_zoom_in = QPushButton("+")
+        btn_zoom_in.setFixedWidth(35)
+        btn_zoom_in.setStyleSheet(btn_style)
+        btn_zoom_in.clicked.connect(self.zoom_in)
         
-        ctk.CTkLabel(shortcuts_bar, text="Links:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
+        self.lbl_zoom = QLabel("100%")
+        self.lbl_zoom.setFixedWidth(50)
+        self.lbl_zoom.setStyleSheet("color: #aaaaaa;")
+        
+        nav_bar_layout.addWidget(btn_back)
+        nav_bar_layout.addWidget(btn_forward)
+        nav_bar_layout.addWidget(btn_reload)
+        nav_bar_layout.addWidget(self.url_entry, 1)
+        nav_bar_layout.addWidget(btn_go)
+        nav_bar_layout.addSpacing(10)
+        nav_bar_layout.addWidget(btn_zoom_out)
+        nav_bar_layout.addWidget(btn_zoom_in)
+        nav_bar_layout.addWidget(self.lbl_zoom)
+        
+        layout.addWidget(nav_bar)
+        
+        download_bar = QFrame()
+        download_bar.setStyleSheet("background-color: #252525; padding: 8px;")
+        download_layout = QHBoxLayout(download_bar)
+        download_layout.setSpacing(10)
+        
+        label_steam = QLabel("Steam ID:")
+        label_steam.setStyleSheet("color: #aaaaaa; font-weight: bold;")
+        download_layout.addWidget(label_steam)
+        
+        self.mod_id_entry = QLineEdit()
+        self.mod_id_entry.setPlaceholderText("Mod ID")
+        self.mod_id_entry.setFixedWidth(150)
+        self.mod_id_entry.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                padding: 6px 10px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #1f538d;
+            }
+        """)
+        
+        self.btn_download = QPushButton("Download")
+        self.btn_download.setStyleSheet("""
+            QPushButton {
+                background-color: #1f538d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2a6fbd;
+            }
+        """)
+        self.btn_download.clicked.connect(self.descargar_por_id)
+        
+        self.btn_smods = QPushButton("From Smods")
+        self.btn_smods.setStyleSheet("""
+            QPushButton {
+                background-color: #2d5a27;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #3d7a37;
+            }
+        """)
+        self.btn_smods.clicked.connect(self.descargar_desde_smods)
+        
+        download_layout.addWidget(self.mod_id_entry)
+        download_layout.addWidget(self.btn_download)
+        download_layout.addWidget(self.btn_smods)
+        download_layout.addStretch()
+        
+        layout.addWidget(download_bar)
+        
+        shortcuts_bar = QFrame()
+        shortcuts_bar.setStyleSheet("background-color: #252525; padding: 8px;")
+        shortcuts_layout = QHBoxLayout(shortcuts_bar)
+        shortcuts_layout.setSpacing(8)
+        
+        label_links = QLabel("Links:")
+        label_links.setStyleSheet("color: #aaaaaa; font-weight: bold;")
+        shortcuts_layout.addWidget(label_links)
         
         shortcuts = [
             ("Steam Workshop", "https://steamcommunity.com/app/250900/workshop/"),
@@ -353,131 +567,263 @@ class PyIsaacLauncher(ctk.CTk):
             ("Modding of Isaac", "https://moddingofisaac.com/"),
         ]
         
+        link_style = """
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 12px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """
+        
         for name, url in shortcuts:
-            ctk.CTkButton(
-                shortcuts_bar, 
-                text=name, 
-                width=110, 
-                command=lambda u=url: self.navegar_a(u)
-            ).pack(side="left", padx=3)
-
-        self.browser_frame = ctk.CTkFrame(tab)
-        self.browser_frame.pack(fill="both", expand=True, padx=5, pady=5)
+            btn = QPushButton(name)
+            btn.setStyleSheet(link_style)
+            btn.clicked.connect(lambda checked, u=url: self.navegar_a(u))
+            shortcuts_layout.addWidget(btn)
         
-        try:
-            self.browser = HtmlFrame(self.browser_frame)
-            self.browser.pack(fill="both", expand=True, padx=2, pady=2)
-            self.browser.load_url("https://steamcommunity.com/app/250900/workshop/")
-        except Exception as e:
-            ctk.CTkLabel(self.browser_frame, text=f"Error: {e}").pack()
-            print(f"Error navegador: {e}")
-
+        shortcuts_layout.addStretch()
+        layout.addWidget(shortcuts_bar)
+        
+        self.browser_frame = QFrame()
+        layout.addWidget(self.browser_frame)
+        
+        browser_layout = QVBoxLayout(self.browser_frame)
+        browser_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.browser = QWebEngineView()
+        
+        settings = self.browser.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        
+        self.browser.urlChanged.connect(self.on_url_changed)
+        
+        browser_layout.addWidget(self.browser)
+        self.browser.load(QUrl("https://steamcommunity.com/app/250900/workshop/"))
+    
+    def on_url_changed(self, url):
+        self.url_entry.setText(url.toString())
+    
     def setup_mods_tab(self):
-        tab = self.tabview.tab("Mods")
+        layout = QHBoxLayout(self.tab_mods)
         
-        mods_container = ctk.CTkFrame(tab)
-        mods_container.pack(fill="both", expand=True, padx=5, pady=5)
+        left_panel = QFrame()
+        left_layout = QVBoxLayout(left_panel)
         
-        left_panel = ctk.CTkFrame(mods_container, width=300)
-        left_panel.pack(side="left", fill="both", padx=(0, 5))
-        left_panel.pack_propagate(False)
+        toolbar = QFrame()
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(5, 5, 5, 5)
         
-        toolbar = ctk.CTkFrame(left_panel)
-        toolbar.pack(fill="x", padx=5, pady=5)
+        toolbar_btn_style = """
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """
         
-        ctk.CTkButton(toolbar, text="↻", width=35, command=self.actualizar_lista_mods).pack(side="left", padx=2)
-        ctk.CTkButton(toolbar, text="+", width=35, fg_color="#1f538d", command=self.seleccionar_archivo).pack(side="left", padx=2)
-        ctk.CTkButton(toolbar, text="🗑", width=35, fg_color="#8d1f1f", command=self.eliminar_mod_seleccionado).pack(side="left", padx=2)
+        btn_refresh = QPushButton("↻")
+        btn_refresh.setFixedWidth(35)
+        btn_refresh.setStyleSheet(toolbar_btn_style)
+        btn_refresh.clicked.connect(self.actualizar_lista_mods)
         
-        self.lista_mods_frame = ctk.CTkFrame(left_panel)
-        self.lista_mods_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        btn_add = QPushButton("+")
+        btn_add.setFixedWidth(35)
+        btn_add.setStyleSheet("""
+            QPushButton {
+                background-color: #1f538d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2a6fbd;
+            }
+        """)
+        btn_add.clicked.connect(self.seleccionar_archivo)
         
-        from tkinter import Listbox
-        self.lista_mods = Listbox(self.lista_mods_frame, bg="#2b2b2b", fg="white", selectbackground="#1f538d", borderwidth=0, highlightthickness=0)
-        self.lista_mods.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-        self.lista_mods.bind("<<ListboxSelect>>", self.on_mod_select)
+        btn_delete = QPushButton("🗑")
+        btn_delete.setFixedWidth(35)
+        btn_delete.setStyleSheet("""
+            QPushButton {
+                background-color: #8d1f1f;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #bd2f2f;
+            }
+        """)
+        btn_delete.clicked.connect(self.eliminar_mod_seleccionado)
         
-        self.panel_info = ctk.CTkFrame(mods_container)
-        self.panel_info.pack(side="left", fill="both", expand=True)
+        toolbar_layout.addWidget(btn_refresh)
+        toolbar_layout.addWidget(btn_add)
+        toolbar_layout.addWidget(btn_delete)
+        toolbar_layout.addStretch()
         
-        from tkinter import Canvas, Scrollbar
-        self.info_canvas = Canvas(self.panel_info, bg="#2b2b2b", highlightthickness=0)
-        self.info_canvas.pack(side="left", fill="both", expand=True)
+        left_layout.addWidget(toolbar)
         
-        self.info_scrollbar = Scrollbar(self.panel_info, command=self.info_canvas.yview)
-        self.info_scrollbar.pack(side="right", fill="y")
+        self.lista_mods = QListWidget()
+        self.lista_mods.setStyleSheet("""
+            QListWidget {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QListWidget::item:selected {
+                background-color: #1f538d;
+            }
+            QListWidget::item:hover {
+                background-color: #2d2d2d;
+            }
+        """)
+        self.lista_mods.itemClicked.connect(self.on_mod_select)
+        left_layout.addWidget(self.lista_mods)
         
-        self.info_canvas.configure(yscrollcommand=self.info_scrollbar.set)
+        layout.addWidget(left_panel, 1)
         
-        self.info_content = ctk.CTkFrame(self.info_canvas, fg_color="transparent")
-        self.info_canvas.create_window((0, 0), window=self.info_content, anchor="nw")
+        center_panel = QFrame()
+        center_panel.setStyleSheet("background-color: #1e1e1e;")
+        center_layout = QVBoxLayout(center_panel)
+        center_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.info_content.bind("<Configure>", lambda e: self.info_canvas.configure(scrollregion=self.info_canvas.bbox("all")))
+        self.lbl_info_titulo = QLabel("Select a mod")
+        self.lbl_info_titulo.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
+        center_layout.addWidget(self.lbl_info_titulo)
         
-        self.lbl_info_titulo = ctk.CTkLabel(self.info_content, text="Select a mod", font=("Arial", 16, "bold"), wraplength=300)
-        self.lbl_info_titulo.pack(pady=(20, 10), padx=10)
+        self.lbl_info_buscar = QLabel("")
+        self.lbl_info_buscar.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        center_layout.addWidget(self.lbl_info_buscar)
         
-        self.lbl_info_buscar = ctk.CTkLabel(self.info_content, text="Loading...", text_color="gray", wraplength=300)
-        self.lbl_info_buscar.pack(pady=5, padx=10)
+        scroll_desc = QScrollArea()
+        scroll_desc.setStyleSheet("border: none;")
+        scroll_desc.setWidgetResizable(True)
+        self.lbl_info_desc = QLabel("")
+        self.lbl_info_desc.setStyleSheet("color: #cccccc;")
+        self.lbl_info_desc.setWordWrap(True)
+        scroll_desc.setWidget(self.lbl_info_desc)
+        center_layout.addWidget(scroll_desc, 1)
         
-        self.lbl_info_desc = ctk.CTkLabel(self.info_content, text="", wraplength=300, justify="left")
-        self.lbl_info_desc.pack(pady=10, padx=10)
+        self.lbl_info_autor = QLabel("")
+        self.lbl_info_autor.setStyleSheet("color: #888888; font-size: 12px;")
+        center_layout.addWidget(self.lbl_info_autor)
         
-        self.lbl_info_autor = ctk.CTkLabel(self.info_content, text="", wraplength=300)
-        self.lbl_info_autor.pack(pady=5, padx=10)
+        layout.addWidget(center_panel, 1)
         
-        self.panel_imagenes = ctk.CTkFrame(mods_container)
-        self.panel_imagenes.pack(side="right", fill="both", expand=True, padx=(5, 0))
+        right_panel = QFrame()
+        right_panel.setStyleSheet("background-color: #1e1e1e;")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.imagenes_canvas = Canvas(self.panel_imagenes, bg="#2b2b2b", highlightthickness=0)
-        self.imagenes_canvas.pack(side="left", fill="both", expand=True)
+        self.lbl_images_title = QLabel("Images")
+        self.lbl_images_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;")
+        right_layout.addWidget(self.lbl_images_title)
         
-        self.imagenes_scrollbar = Scrollbar(self.panel_imagenes, command=self.imagenes_canvas.yview)
-        self.imagenes_scrollbar.pack(side="right", fill="y")
+        self.scroll_images = QScrollArea()
+        self.scroll_images.setStyleSheet("border: none;")
+        self.scroll_images.setWidgetResizable(True)
+        self.images_widget = QWidget()
+        self.images_widget.setStyleSheet("background-color: #1e1e1e;")
+        self.images_layout = QVBoxLayout(self.images_widget)
+        self.images_layout.setSpacing(10)
+        self.scroll_images.setWidget(self.images_widget)
+        right_layout.addWidget(self.scroll_images)
         
-        self.imagenes_canvas.configure(yscrollcommand=self.imagenes_scrollbar.set)
-        
-        self.imagenes_frame = ctk.CTkFrame(self.imagenes_canvas, fg_color="transparent")
-        self.imagenes_canvas.create_window((0, 0), window=self.imagenes_frame, anchor="nw")
-        
-        self.imagenes_frame.bind("<Configure>", lambda e: self.imagenes_canvas.configure(scrollregion=self.imagenes_canvas.bbox("all")))
-        
-        ctk.CTkLabel(self.imagenes_frame, text="Images", font=("Arial", 14, "bold")).pack(pady=(10, 5), padx=10)
+        layout.addWidget(right_panel, 1)
         
         self.actualizar_lista_mods()
-
+    
+    def setup_about_tab(self):
+        layout = QVBoxLayout(self.tab_about)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(8)
+        
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.svg")
+        if os.path.exists(logo_path):
+            logo_widget = QSvgWidget(logo_path)
+            logo_widget.setMinimumSize(150, 150)
+            logo_widget.setMaximumSize(200, 200)
+            logo_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            layout.addWidget(logo_widget)
+        
+        title = QLabel("PyIsaac Launcher")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #ffffff; margin-top: 10px;")
+        layout.addWidget(title)
+        
+        version = QLabel("Version 1.0")
+        version.setStyleSheet("color: #aaaaaa; font-size: 14px;")
+        layout.addWidget(version)
+        
+        desc = QLabel("A mod manager for\nThe Binding of Isaac: Repentance")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setStyleSheet("color: #cccccc; margin: 10px 0px;")
+        layout.addWidget(desc)
+        
+        features_title = QLabel("Features:")
+        features_title.setStyleSheet("font-weight: bold; color: #ffffff; margin-top: 10px;")
+        layout.addWidget(features_title)
+        
+        features = [
+            "• Integrated browser for mod sites",
+            "• Automatic metadata from Steam",
+            "• Easy mod installation",
+            "• Modern dark UI"
+        ]
+        
+        for f in features:
+            lbl = QLabel(f)
+            lbl.setStyleSheet("color: #aaaaaa;")
+            layout.addWidget(lbl)
+        
+        layout.addStretch()
+    
     def actualizar_lista_mods(self):
-        mods_path = self.entry_mods.get()
-        if not os.path.exists(mods_path):
+        if self.entry_mods and self.entry_mods.text():
+            mods_path = self.entry_mods.text()
+        else:
+            mods_path = self.config.get("isaac_mods_path", get_default_mods_path())
+        
+        if not mods_path or not os.path.exists(mods_path):
             os.makedirs(mods_path, exist_ok=True)
         
         self.procesar_zips_en_carpeta(mods_path)
         
-        self.lista_mods.delete(0, "end")
+        self.lista_mods.clear()
         
         items = os.listdir(mods_path)
         if not items:
-            self.lista_mods.insert("end", "No mods installed")
+            self.lista_mods.addItem("No mods installed")
             return
         
-        self.mod_seleccionado = None
         self.mods_list = []
         
         for item in sorted(items):
             item_path = os.path.join(mods_path, item)
             if os.path.isdir(item_path):
-                self.lista_mods.insert("end", item)
+                self.lista_mods.addItem(item)
                 self.mods_list.append(item)
         
         if self.mods_list:
-            self.lista_mods.selection_set(0)
-            self.lista_mods.see(0)
-            self.mod_seleccionado = self.mods_list[0]
-            self.mostrar_info_mod(self.mods_list[0])
+            self.lista_mods.setCurrentRow(0)
     
     def procesar_zips_en_carpeta(self, mods_path):
-        import tempfile
-        
         for item in os.listdir(mods_path):
             if item.endswith(".zip"):
                 zip_path = os.path.join(mods_path, item)
@@ -499,52 +845,40 @@ class PyIsaacLauncher(ctk.CTk):
                         
                         if nombre_oficial:
                             destino = os.path.join(mods_path, nombre_oficial)
-                            print(f"Nombre oficial del mod: {nombre_oficial}")
-                        else:
-                            destino = None
-                        
-                        if destino:
-                            if os.path.exists(destino):
-                                shutil.rmtree(destino)
-                            shutil.copytree(carpeta_extraida, destino)
                         else:
                             nombre_base = os.path.splitext(item)[0]
                             destino = os.path.join(mods_path, nombre_base)
-                            if os.path.exists(destino):
-                                shutil.rmtree(destino)
-                            shutil.copytree(carpeta_extraida, destino)
+                        
+                        if os.path.exists(destino):
+                            shutil.rmtree(destino)
+                        shutil.copytree(carpeta_extraida, destino)
                         
                         os.remove(zip_path)
-                        print(f"Mod instalado y zip eliminado: {destino}")
+                        print(f"Mod instalado: {destino}")
                         
                 except Exception as e:
                     print(f"Error processing {item}: {e}")
     
-    def on_mod_select(self, event):
-        selection = self.lista_mods.curselection()
-        if selection:
-            index = selection[0]
-            if index < len(self.mods_list):
-                mod_name = self.mods_list[index]
-                self.mod_seleccionado = mod_name
-                self.mostrar_info_mod(mod_name)
-
+    def on_mod_select(self, item):
+        index = self.lista_mods.row(item)
+        if index < len(self.mods_list):
+            mod_name = self.mods_list[index]
+            self.mod_seleccionado = mod_name
+            self.mostrar_info_mod(mod_name)
+    
     def mostrar_info_mod(self, nombre):
         self.mod_seleccionado = nombre
-        
-        self.lbl_info_titulo.configure(text=nombre)
-        self.lbl_info_buscar.configure(text="Loading...")
-        self.lbl_info_desc.configure(text="")
-        self.lbl_info_autor.configure(text="")
+        self.lbl_info_titulo.setText(nombre)
+        self.lbl_info_buscar.setText("Loading...")
+        self.lbl_info_desc.setText("")
+        self.lbl_info_autor.setText("")
         
         self.leer_metadata_local(nombre)
-
+    
     def leer_metadata_local(self, nombre):
         import xml.etree.ElementTree as ET
-        import re
-        from PIL import Image, ImageTk, ImageDraw
         
-        mods_path = self.entry_mods.get()
+        mods_path = self.entry_mods.text()
         mod_path = os.path.join(mods_path, nombre)
         
         metadata_file = os.path.join(mod_path, "metadata.xml")
@@ -587,130 +921,150 @@ class PyIsaacLauncher(ctk.CTk):
                 if ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]:
                     imagenes.append(os.path.join(mod_path, file))
         
-        self.lbl_info_titulo.configure(text=titulo)
+        self.lbl_info_titulo.setText(titulo)
         
         info_text = ""
         if version:
             info_text += f"Version: {version}"
         if tags:
             info_text += f" | Tags: {', '.join(tags)}"
-        self.lbl_info_buscar.configure(text=info_text or "No metadata")
-        self.lbl_info_desc.configure(text=descripcion)
+        self.lbl_info_buscar.setText(info_text or "No metadata")
+        self.lbl_info_desc.setText(descripcion)
         
-        for widget in self.imagenes_frame.winfo_children():
-            widget.destroy()
+        for i in range(self.images_layout.count()):
+            widget = self.images_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
         
         if imagenes:
             for img_path in imagenes:
                 try:
-                    img = Image.open(img_path)
-                    img.thumbnail((400, 300), Image.Resampling.LANCZOS)
-                    photo = ImageTk.PhotoImage(img)
-                    lbl = ctk.CTkLabel(self.imagenes_frame, image=photo, text="")
-                    lbl.image = photo
-                    lbl.pack(pady=5)
+                    pixmap = QPixmap(img_path)
+                    if not pixmap.isNull():
+                        pixmap = pixmap.scaled(400, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        lbl = QLabel()
+                        lbl.setPixmap(pixmap)
+                        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        self.images_layout.addWidget(lbl)
                 except Exception as e:
                     print(f"Error loading image {img_path}: {e}")
-            self.imagenes_frame.update_idletasks()
-            self.imagenes_canvas.configure(scrollregion=self.imagenes_canvas.bbox("all"))
         else:
             placeholder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "placeholder.svg")
-            photo = None
-            
             if os.path.exists(placeholder_path):
-                try:
-                    import cairosvg
-                    png_data = cairosvg.svg2png(url=placeholder_path, output_width=400, output_height=300)
-                    from io import BytesIO
-                    img = Image.open(BytesIO(png_data))
-                    photo = ImageTk.PhotoImage(img)
-                except ImportError:
-                    print("cairosvg not installed, trying with PIL (won't work for SVG)")
-                except Exception as e:
-                    print(f"Error loading SVG placeholder: {e}")
-            
-            if not photo:
-                placeholder = Image.new('RGB', (400, 300), color='#2b2b2b')
-                draw = ImageDraw.Draw(placeholder)
-                try:
-                    draw.text((200, 150), "No images", fill="gray", anchor="mm")
-                except:
-                    pass
-                photo = ImageTk.PhotoImage(placeholder)
-            
-            if photo:
-                lbl = ctk.CTkLabel(self.imagenes_frame, image=photo, text="")
-                lbl.image = photo
-                lbl.pack(pady=20)
-
+                placeholder = QSvgWidget(placeholder_path)
+                placeholder.setFixedSize(400, 300)
+                self.images_layout.addWidget(placeholder)
+            else:
+                lbl = QLabel("No images")
+                lbl.setStyleSheet("color: gray;")
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.images_layout.addWidget(lbl)
+    
     def eliminar_mod_seleccionado(self):
         if not self.mod_seleccionado:
-            print("Select a mod first")
+            QMessageBox.information(self, "Info", "Select a mod first")
             return
         
-        mods_path = self.entry_mods.get()
+        mods_path = self.entry_mods.text()
         mod_path = os.path.join(mods_path, self.mod_seleccionado)
         
-        if os.path.exists(mod_path):
+        reply = QMessageBox.question(self, "Confirm", f"Delete mod: {self.mod_seleccionado}?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes and os.path.exists(mod_path):
             shutil.rmtree(mod_path)
             print(f"Mod eliminado: {self.mod_seleccionado}")
             self.mod_seleccionado = None
             self.actualizar_lista_mods()
-
+    
     def navegar_url(self):
-        url = self.url_entry.get().strip()
+        url = self.url_entry.text().strip()
         if url:
             if not url.startswith("http"):
                 url = "https://" + url
-            try:
-                print(f"Navegando a: {url}")
-                self.browser.load_url(url)
-            except Exception as e:
-                print(f"Error browsing: {e}")
-                try:
-                    self.browser.load_website(url)
-                except Exception as e2:
-                    print(f"También falló load_website: {e2}")
-
+            self.browser.setUrl(QUrl(url))
+    
     def atras(self):
-        try:
-            self.browser.back()
-        except Exception:
-            pass
-
+        self.browser.back()
+    
     def adelante(self):
-        try:
-            self.browser.forward()
-        except Exception:
-            pass
-
+        self.browser.forward()
+    
     def recargar(self):
-        url = self.url_entry.get()
-        if url:
-            self.navegar_url()
-
+        self.browser.reload()
+    
     def zoom_in(self):
-        print("Zoom in no disponible en esta versión")
-
+        self.zoom_level = min(2.0, self.zoom_level + 0.25)
+        self.browser.setZoomFactor(self.zoom_level)
+        self.lbl_zoom.setText(f"{int(self.zoom_level * 100)}%")
+    
     def zoom_out(self):
-        print("Zoom out no disponible en esta versión")
-
+        self.zoom_level = max(0.5, self.zoom_level - 0.25)
+        self.browser.setZoomFactor(self.zoom_level)
+        self.lbl_zoom.setText(f"{int(self.zoom_level * 100)}%")
+    
     def navegar_a(self, url):
-        self.url_entry.delete(0, "end")
-        self.url_entry.insert(0, url)
-        self.navegar_url()
-
+        if self.url_entry:
+            self.url_entry.setText(url)
+        if self.browser:
+            self.browser.setUrl(QUrl(url))
+    
+    def descargar_por_id(self):
+        mod_id = self.mod_id_entry.text().strip()
+        if not mod_id:
+            QMessageBox.warning(self, "Error", "Enter a mod ID")
+            return
+        
+        if not mod_id.isdigit():
+            QMessageBox.warning(self, "Error", "ID must be numbers only")
+            return
+        
+        self.btn_download.setEnabled(False)
+        self.btn_download.setText("Downloading...")
+        
+        self.descarga_thread = DescargaThread(mod_id, self.config)
+        self.descarga_thread.progress.connect(lambda m: self.btn_download.setText(m))
+        self.descarga_thread.finished.connect(lambda m: self.on_descarga_finished(m, True))
+        self.descarga_thread.error.connect(lambda m: self.on_descarga_finished(m, False))
+        self.descarga_thread.start()
+    
+    def descargar_desde_smods(self):
+        url_or_id = self.mod_id_entry.text().strip()
+        
+        if not url_or_id:
+            QMessageBox.warning(self, "Error", "Enter a Smods URL or mod ID")
+            return
+        
+        self.btn_smods.setEnabled(False)
+        self.btn_smods.setText("Searching...")
+        
+        self.smods_thread = SmodsThread(url_or_id, self.config)
+        self.smods_thread.progress.connect(lambda m: self.btn_smods.setText(m))
+        self.smods_thread.finished.connect(lambda m: self.on_descarga_finished(m, True))
+        self.smods_thread.error.connect(lambda m: self.on_descarga_finished(m, False))
+        self.smods_thread.start()
+    
+    def on_descarga_finished(self, message, success):
+        self.btn_download.setEnabled(True)
+        self.btn_download.setText("Download")
+        self.btn_smods.setEnabled(True)
+        self.btn_smods.setText("From Smods")
+        
+        if success:
+            QMessageBox.information(self, "Success", message)
+            self.actualizar_lista_mods()
+        else:
+            QMessageBox.warning(self, "Error", message)
+    
     def seleccionar_archivo(self):
-        filepath = filedialog.askopenfilename(title="Select downloaded file", filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")])
+        filepath, _ = QFileDialog.getOpenFileName(self, "Select downloaded file", "", "ZIP files (*.zip);;All files (*.*)")
         
         if filepath:
-            mods_path = self.entry_mods.get()
+            mods_path = self.entry_mods.text()
             os.makedirs(mods_path, exist_ok=True)
             
             try:
                 if filepath.endswith(".zip"):
-                    import tempfile
-                    
                     with tempfile.TemporaryDirectory() as temp_dir:
                         with zipfile.ZipFile(filepath, 'r') as zip_ref:
                             zip_ref.extractall(temp_dir)
@@ -726,32 +1080,24 @@ class PyIsaacLauncher(ctk.CTk):
                         
                         if nombre_oficial:
                             destino = os.path.join(mods_path, nombre_oficial)
-                            print(f"Nombre oficial del mod: {nombre_oficial}")
                         else:
-                            destino = None
+                            filename = os.path.basename(filepath)
+                            nombre_mod = os.path.splitext(filename)[0]
+                            destino = os.path.join(mods_path, nombre_mod)
                         
-                        if destino and os.path.exists(destino):
+                        if os.path.exists(destino):
                             shutil.rmtree(destino)
                         
-                        if destino:
-                            shutil.copytree(carpeta_extraida, destino)
-                        else:
-                            print("No se encontró nombre en metadata")
+                        shutil.copytree(carpeta_extraida, destino)
+                    
+                    print(f"Mod instalado en: {destino}")
+                    self.actualizar_lista_mods()
                 else:
-                    filename = os.path.basename(filepath)
-                    nombre_mod = os.path.splitext(filename)[0]
-                    destino = os.path.join(mods_path, nombre_mod)
-                    os.makedirs(destino, exist_ok=True)
-                    shutil.copy2(filepath, destino)
-                
-                print(f"Mod instalado en: {destino}")
-                self.actualizar_lista_mods()
+                    QMessageBox.warning(self, "Error", "Unsupported file format")
             except Exception as e:
-                print(f"Error installing mod: {e}")
+                QMessageBox.critical(self, "Error", f"Error installing mod: {e}")
     
     def buscar_nombre_en_metadata(self, folder):
-        import re
-        
         for root, dirs, files in os.walk(folder):
             for file in files:
                 if file in ["metadata.xml", "metadata.txt", "info.xml", "info.txt"]:
@@ -762,17 +1108,34 @@ class PyIsaacLauncher(ctk.CTk):
                         
                         match = re.search(r'<name>([^<]+)</name>', content, re.IGNORECASE)
                         if match:
-                            nombre = match.group(1).strip()
-                            return nombre
+                            return match.group(1).strip()
                         
                         match = re.search(r'^Name\s*=\s*(.+)$', content, re.MULTILINE | re.IGNORECASE)
                         if match:
-                            nombre = match.group(1).strip()
-                            return nombre
+                            return match.group(1).strip()
                     except:
                         pass
         return None
 
 if __name__ == "__main__":
-    app = PyIsaacLauncher()
-    app.mainloop()
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    
+    palette = app.palette()
+    palette.setColor(palette.ColorRole.Window, QColor(30, 30, 30))
+    palette.setColor(palette.ColorRole.WindowText, QColor(255, 255, 255))
+    palette.setColor(palette.ColorRole.Base, QColor(45, 45, 45))
+    palette.setColor(palette.ColorRole.AlternateBase, QColor(35, 35, 35))
+    palette.setColor(palette.ColorRole.ToolTipBase, QColor(50, 50, 50))
+    palette.setColor(palette.ColorRole.ToolTipText, QColor(255, 255, 255))
+    palette.setColor(palette.ColorRole.Text, QColor(255, 255, 255))
+    palette.setColor(palette.ColorRole.Button, QColor(60, 60, 60))
+    palette.setColor(palette.ColorRole.ButtonText, QColor(255, 255, 255))
+    palette.setColor(palette.ColorRole.BrightText, QColor(255, 255, 255))
+    palette.setColor(palette.ColorRole.Highlight, QColor(31, 83, 141))
+    palette.setColor(palette.ColorRole.HighlightedText, QColor(255, 255, 255))
+    app.setPalette(palette)
+    
+    window = PyIsaacLauncher()
+    window.show()
+    sys.exit(app.exec())
