@@ -22,33 +22,10 @@ from PyQt6.QtGui import QIcon, QPixmap, QImage, QColor
 
 IS_LINUX = sys.platform.startswith("linux")
 
-def find_steam_isaac_path():
-    if IS_LINUX:
-        return None
-    candidates = [
-        os.path.expandvars(r"%ProgramFiles(x86)%\Steam\steamapps\common\The Binding of Isaac Rebirth\mods"),
-        os.path.expandvars(r"%ProgramFiles%\Steam\steamapps\common\The Binding of Isaac Rebirth\mods"),
-    ]
-    for drive in "CDEFGH":
-        candidates.append(f"{drive}:/SteamLibrary/steamapps/common/The Binding of Isaac Rebirth/mods")
-        candidates.append(f"{drive}:/Games/SteamLibrary/steamapps/common/The Binding of Isaac Rebirth/mods")
-        candidates.append(f"{drive}:/Juegos/SteamLibrary/steamapps/common/The Binding of Isaac Rebirth/mods")
-    for p in candidates:
-        if os.path.exists(p):
-            return p
-    return None
-
 def get_default_mods_path():
-    if IS_LINUX:
-        return os.path.expanduser("~/.local/share/Steam/steamapps/common/The Binding of Isaac Rebirth/mods")
-    detected = find_steam_isaac_path()
-    if detected:
-        return detected
     return ""
 
 def get_default_exe_path():
-    if IS_LINUX:
-        return os.path.expanduser("~/.local/share/Steam/steamapps/common/The Binding of Isaac Rebirth/isaac-ng")
     return ""
 
 def cargar_config():
@@ -226,6 +203,11 @@ class PyIsaacLauncher(QMainWindow):
         self.setWindowTitle("PyIsaac Launcher v1.0")
         self.setGeometry(100, 100, 1100, 650)
         
+        app = QApplication.instance()
+        font = app.font()
+        font.setPointSize(10)
+        app.setFont(font)
+        
         self.setup_ui()
         
     def setup_ui(self):
@@ -236,121 +218,44 @@ class PyIsaacLauncher(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane {
-                border: none;
-                background-color: #1e1e1e;
-            }
-            QTabBar::tab {
-                background-color: #2d2d2d;
-                color: #aaaaaa;
-                padding: 10px 20px;
-                border: none;
-                margin-right: 2px;
-            }
-            QTabBar::tab:selected {
-                background-color: #1e1e1e;
-                color: #ffffff;
-            }
-            QTabBar::tab:hover {
-                background-color: #3d3d3d;
-            }
-        """)
-        main_layout.addWidget(self.tab_widget)
-        
-        self.tab_mods = QWidget()
-        self.tab_mods.setStyleSheet("background-color: #1e1e1e;")
-        self.tab_widget.addTab(self.tab_mods, "Mods")
-        
         self.browser_window = None
         
-        self.setup_mods_tab()
-        
-        self.tab_widget.setCurrentIndex(0)
-        
         self.setup_header(main_layout)
+        
+        self.mods_content = QFrame()
+        self.mods_content.setStyleSheet("background-color: #1e1e1e;")
+        main_layout.addWidget(self.mods_content, 1)
+        
+        self.setup_mods_tab()
         
     def setup_header(self, main_layout):
         header_frame = QFrame()
         header_frame.setStyleSheet("""
             background-color: #252525;
-            border-top: 1px solid #3d3d3d;
-            padding: 10px;
+            border-bottom: 1px solid #3d3d3d;
+            padding: 6px;
         """)
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setSpacing(15)
+        header_layout.setContentsMargins(8, 4, 8, 4)
+        header_layout.setSpacing(8)
         
         self.entry_mods = QLineEdit()
         self.entry_mods.setText(self.config.get("isaac_mods_path", get_default_mods_path()))
-        self.entry_mods.setPlaceholderText("Mods path...")
-        self.entry_mods.setStyleSheet("""
-            QLineEdit {
-                background-color: #1e1e1e;
-                color: #ffffff;
-                border: 1px solid #3d3d3d;
-                border-radius: 4px;
-                padding: 6px 10px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #1f538d;
-            }
-        """)
-        
-        btn_browse_mods = QPushButton("📁")
-        btn_browse_mods.setFixedWidth(40)
-        btn_browse_mods.setStyleSheet("""
-            QPushButton {
-                background-color: #3d3d3d;
-                border: none;
-                border-radius: 4px;
-                padding: 6px;
-            }
-            QPushButton:hover {
-                background-color: #4d4d4d;
-            }
-        """)
-        btn_browse_mods.clicked.connect(self.browse_mods_path)
+        self.entry_mods.setVisible(False)
         
         self.entry_isaac = QLineEdit()
         self.entry_isaac.setText(self.config.get("isaac_exe_path", get_default_exe_path()))
-        self.entry_isaac.setPlaceholderText("Game executable...")
-        self.entry_isaac.setStyleSheet("""
-            QLineEdit {
-                background-color: #1e1e1e;
-                color: #ffffff;
-                border: 1px solid #3d3d3d;
-                border-radius: 4px;
-                padding: 6px 10px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #1f538d;
-            }
-        """)
+        self.entry_isaac.setVisible(False)
         
-        btn_browse_isaac = QPushButton("📁")
-        btn_browse_isaac.setFixedWidth(40)
-        btn_browse_isaac.setStyleSheet("""
-            QPushButton {
-                background-color: #3d3d3d;
-                border: none;
-                border-radius: 4px;
-                padding: 6px;
-            }
-            QPushButton:hover {
-                background-color: #4d4d4d;
-            }
-        """)
-        btn_browse_isaac.clicked.connect(self.browse_isaac_path)
-        
-        self.btn_run = QPushButton("🎮 Run Game")
+        self.btn_run = QPushButton("Launch")
+        self.btn_run.setFixedSize(70, 28)
         self.btn_run.setStyleSheet("""
             QPushButton {
                 background-color: #2d5a27;
                 color: white;
                 border: none;
                 border-radius: 4px;
-                padding: 8px 16px;
+                padding: 5px 10px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -359,54 +264,45 @@ class PyIsaacLauncher(QMainWindow):
         """)
         self.btn_run.clicked.connect(self.ejecutar_isaac)
         
-        btn_about = QPushButton("?")
-        btn_about.setFixedSize(28, 28)
-        btn_about.setStyleSheet("""
+        btn_settings = QPushButton("Settings")
+        btn_settings.setFixedSize(70, 28)
+        btn_settings.setStyleSheet("""
             QPushButton {
                 background-color: #3d3d3d;
-                color: #aaaaaa;
-                border: 1px solid #555555;
-                border-radius: 14px;
-                font-size: 13px;
-                font-weight: bold;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
             }
             QPushButton:hover {
                 background-color: #4d4d4d;
-                color: #ffffff;
             }
         """)
-        btn_about.setToolTip("About")
+        btn_settings.clicked.connect(self.show_settings_dialog)
+        
+        btn_about = QPushButton("About")
+        btn_about.setFixedSize(70, 28)
+        btn_about.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """)
         btn_about.clicked.connect(self.show_about_dialog)
         
-        label_mods = QLabel("Mods:")
-        label_mods.setStyleSheet("color: #aaaaaa; font-weight: bold;")
-        label_game = QLabel("Game:")
-        label_game.setStyleSheet("color: #aaaaaa; font-weight: bold;")
-        
-        header_layout.addWidget(label_mods)
-        header_layout.addWidget(self.entry_mods)
-        header_layout.addWidget(btn_browse_mods)
-        header_layout.addWidget(label_game)
-        header_layout.addWidget(self.entry_isaac)
-        header_layout.addWidget(btn_browse_isaac)
+        header_layout.addStretch()
         header_layout.addWidget(self.btn_run)
+        header_layout.addWidget(btn_settings)
         header_layout.addWidget(btn_about)
         
         main_layout.addWidget(header_frame)
         
-    def browse_mods_path(self):
-        path = QFileDialog.getExistingDirectory(self, "Select Mods Folder")
-        if path:
-            self.entry_mods.setText(path)
-            self.guardar_config()
-            self.actualizar_lista_mods()
-    
-    def browse_isaac_path(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select Game Executable", "", "Executable (*.exe)")
-        if path:
-            self.entry_isaac.setText(path)
-            self.guardar_config()
-    
     def guardar_config(self):
         self.config["isaac_mods_path"] = self.entry_mods.text()
         self.config["isaac_exe_path"] = self.entry_isaac.text()
@@ -434,8 +330,8 @@ class PyIsaacLauncher(QMainWindow):
         
         self.browser_window = QDialog(self)
         self.browser_window.setWindowTitle("Browser")
-        self.browser_window.setMinimumSize(900, 600)
-        self.browser_window.resize(1100, 700)
+        self.browser_window.setMinimumSize(750, 500)
+        self.browser_window.resize(900, 550)
         self.browser_window.setStyleSheet("background-color: #1e1e1e;")
         
         layout = QVBoxLayout(self.browser_window)
@@ -443,10 +339,10 @@ class PyIsaacLauncher(QMainWindow):
         layout.setSpacing(0)
         
         toolbar = QFrame()
-        toolbar.setStyleSheet("background-color: #252525; padding: 3px 6px;")
-        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar.setStyleSheet("background-color: #252525;")
+        toolbar_layout = QVBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(4, 2, 4, 2)
-        toolbar_layout.setSpacing(4)
+        toolbar_layout.setSpacing(0)
         
         btn_style = """
             QPushButton {
@@ -455,7 +351,6 @@ class PyIsaacLauncher(QMainWindow):
                 border: none;
                 border-radius: 3px;
                 padding: 3px 6px;
-                font-size: 13px;
             }
             QPushButton:hover {
                 background-color: #4d4d4d;
@@ -469,7 +364,6 @@ class PyIsaacLauncher(QMainWindow):
                 border: 1px solid #3d3d3d;
                 border-radius: 3px;
                 padding: 3px 6px;
-                font-size: 13px;
             }
             QLineEdit:focus {
                 border: 1px solid #1f538d;
@@ -484,7 +378,6 @@ class PyIsaacLauncher(QMainWindow):
                 border-radius: 3px;
                 padding: 3px 8px;
                 font-weight: bold;
-                font-size: 13px;
             }
             QPushButton:hover {
                 background-color: #2a6fbd;
@@ -499,7 +392,6 @@ class PyIsaacLauncher(QMainWindow):
                 border-radius: 3px;
                 padding: 3px 8px;
                 font-weight: bold;
-                font-size: 13px;
             }
             QPushButton:hover {
                 background-color: #3d7a37;
@@ -513,25 +405,27 @@ class PyIsaacLauncher(QMainWindow):
                 border: none;
                 border-radius: 3px;
                 padding: 3px 8px;
-                font-size: 12px;
             }
             QPushButton:hover {
                 background-color: #4d4d4d;
             }
         """
         
-        btn_back = QPushButton("←")
-        btn_back.setFixedWidth(28)
+        row1 = QHBoxLayout()
+        row1.setSpacing(4)
+        
+        btn_back = QPushButton("<")
+        btn_back.setFixedSize(70, 28)
         btn_back.setStyleSheet(btn_style)
         btn_back.clicked.connect(self.atras)
         
-        btn_forward = QPushButton("→")
-        btn_forward.setFixedWidth(28)
+        btn_forward = QPushButton(">")
+        btn_forward.setFixedSize(70, 28)
         btn_forward.setStyleSheet(btn_style)
         btn_forward.clicked.connect(self.adelante)
         
-        btn_reload = QPushButton("⟳")
-        btn_reload.setFixedWidth(28)
+        btn_reload = QPushButton("Reload")
+        btn_reload.setFixedSize(70, 28)
         btn_reload.setStyleSheet(btn_style)
         btn_reload.clicked.connect(self.recargar)
         
@@ -541,38 +435,52 @@ class PyIsaacLauncher(QMainWindow):
         self.url_entry.returnPressed.connect(self.navegar_url)
         
         btn_go = QPushButton("Go")
-        btn_go.setFixedWidth(40)
+        btn_go.setFixedSize(70, 28)
         btn_go.setStyleSheet(primary_btn_style)
         btn_go.clicked.connect(self.navegar_url)
+        
+        self.lbl_zoom = QLabel("100%")
+        self.lbl_zoom.setFixedWidth(36)
+        
+        btn_zoom_out = QPushButton("-")
+        btn_zoom_out.setFixedSize(70, 28)
+        btn_zoom_out.setStyleSheet(btn_style)
+        btn_zoom_out.clicked.connect(self.zoom_out)
+        
+        btn_zoom_in = QPushButton("+")
+        btn_zoom_in.setFixedSize(70, 28)
+        btn_zoom_in.setStyleSheet(btn_style)
+        btn_zoom_in.clicked.connect(self.zoom_in)
+        
+        row1.addWidget(btn_back)
+        row1.addWidget(btn_forward)
+        row1.addWidget(btn_reload)
+        row1.addWidget(self.url_entry, 1)
+        row1.addWidget(btn_go)
+        row1.addWidget(btn_zoom_out)
+        row1.addWidget(btn_zoom_in)
+        row1.addWidget(self.lbl_zoom)
+        
+        toolbar_layout.addLayout(row1)
+        
+        row2 = QHBoxLayout()
+        row2.setSpacing(4)
         
         self.mod_id_entry = QLineEdit()
         self.mod_id_entry.setPlaceholderText("Steam ID")
         self.mod_id_entry.setFixedWidth(100)
         self.mod_id_entry.setStyleSheet(input_style)
         
-        self.btn_download = QPushButton("⬇")
-        self.btn_download.setFixedWidth(28)
+        self.btn_download = QPushButton("Download")
+        self.btn_download.setFixedSize(70, 28)
         self.btn_download.setToolTip("Download by Steam ID")
         self.btn_download.setStyleSheet(primary_btn_style)
         self.btn_download.clicked.connect(self.descargar_por_id)
         
         self.btn_smods = QPushButton("Smods")
+        self.btn_smods.setFixedSize(70, 28)
         self.btn_smods.setStyleSheet(smods_btn_style)
         self.btn_smods.clicked.connect(self.descargar_desde_smods)
-        
-        self.lbl_zoom = QLabel("100%")
-        self.lbl_zoom.setFixedWidth(36)
-        self.lbl_zoom.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-        
-        btn_zoom_out = QPushButton("−")
-        btn_zoom_out.setFixedWidth(22)
-        btn_zoom_out.setStyleSheet(btn_style)
-        btn_zoom_out.clicked.connect(self.zoom_out)
-        
-        btn_zoom_in = QPushButton("+")
-        btn_zoom_in.setFixedWidth(22)
-        btn_zoom_in.setStyleSheet(btn_style)
-        btn_zoom_in.clicked.connect(self.zoom_in)
         
         shortcuts = [
             ("Workshop", "https://steamcommunity.com/app/250900/workshop/"),
@@ -582,30 +490,26 @@ class PyIsaacLauncher(QMainWindow):
             ("ModIO", "https://moddingofisaac.com/"),
         ]
         
-        toolbar_layout.addWidget(btn_back)
-        toolbar_layout.addWidget(btn_forward)
-        toolbar_layout.addWidget(btn_reload)
-        toolbar_layout.addWidget(self.url_entry, 1)
-        toolbar_layout.addWidget(btn_go)
-        toolbar_layout.addWidget(self.mod_id_entry)
-        toolbar_layout.addWidget(self.btn_download)
-        toolbar_layout.addWidget(self.btn_smods)
+        row2.addWidget(self.mod_id_entry)
+        row2.addWidget(self.btn_download)
+        row2.addWidget(self.btn_smods)
         
         sep1 = QFrame()
         sep1.setFrameShape(QFrame.Shape.VLine)
         sep1.setStyleSheet("color: #3d3d3d;")
         sep1.setFixedHeight(20)
-        toolbar_layout.addWidget(sep1)
+        row2.addWidget(sep1)
         
         for name, url in shortcuts:
             btn = QPushButton(name)
+            btn.setFixedSize(70, 28)
             btn.setStyleSheet(link_style)
             btn.clicked.connect(lambda checked, u=url: self.navegar_a(u))
-            toolbar_layout.addWidget(btn)
+            row2.addWidget(btn)
         
-        toolbar_layout.addWidget(btn_zoom_out)
-        toolbar_layout.addWidget(btn_zoom_in)
-        toolbar_layout.addWidget(self.lbl_zoom)
+        row2.addStretch()
+        
+        toolbar_layout.addLayout(row2)
         
         layout.addWidget(toolbar)
         
@@ -626,7 +530,7 @@ class PyIsaacLauncher(QMainWindow):
         self.url_entry.setText(url.toString())
     
     def setup_mods_tab(self):
-        layout = QHBoxLayout(self.tab_mods)
+        layout = QHBoxLayout(self.mods_content)
         
         left_panel = QFrame()
         left_layout = QVBoxLayout(left_panel)
@@ -641,28 +545,27 @@ class PyIsaacLauncher(QMainWindow):
                 color: #ffffff;
                 border: none;
                 border-radius: 4px;
-                padding: 6px;
-                font-size: 14px;
+                padding: 5px 10px;
             }
             QPushButton:hover {
                 background-color: #4d4d4d;
             }
         """
         
-        btn_refresh = QPushButton("↻")
-        btn_refresh.setFixedWidth(35)
+        btn_refresh = QPushButton("Refresh")
+        btn_refresh.setFixedSize(70, 28)
         btn_refresh.setStyleSheet(toolbar_btn_style)
         btn_refresh.clicked.connect(self.actualizar_lista_mods)
         
-        btn_add = QPushButton("+")
-        btn_add.setFixedWidth(35)
+        btn_add = QPushButton("Add")
+        btn_add.setFixedSize(70, 28)
         btn_add.setStyleSheet("""
             QPushButton {
                 background-color: #1f538d;
                 color: #ffffff;
                 border: none;
                 border-radius: 4px;
-                padding: 6px;
+                padding: 5px 10px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -671,15 +574,15 @@ class PyIsaacLauncher(QMainWindow):
         """)
         btn_add.clicked.connect(self.seleccionar_archivo)
         
-        btn_delete = QPushButton("🗑")
-        btn_delete.setFixedWidth(35)
+        btn_delete = QPushButton("Delete")
+        btn_delete.setFixedSize(70, 28)
         btn_delete.setStyleSheet("""
             QPushButton {
                 background-color: #8d1f1f;
                 color: #ffffff;
                 border: none;
                 border-radius: 4px;
-                padding: 6px;
+                padding: 5px 10px;
             }
             QPushButton:hover {
                 background-color: #bd2f2f;
@@ -687,15 +590,15 @@ class PyIsaacLauncher(QMainWindow):
         """)
         btn_delete.clicked.connect(self.eliminar_mod_seleccionado)
         
-        btn_open_folder = QPushButton("📂")
-        btn_open_folder.setFixedWidth(35)
+        btn_open_folder = QPushButton("Folder")
+        btn_open_folder.setFixedSize(70, 28)
         btn_open_folder.setStyleSheet("""
             QPushButton {
                 background-color: #3d3d3d;
                 color: #ffffff;
                 border: none;
                 border-radius: 4px;
-                padding: 6px;
+                padding: 5px 10px;
             }
             QPushButton:hover {
                 background-color: #4d4d4d;
@@ -703,8 +606,8 @@ class PyIsaacLauncher(QMainWindow):
         """)
         btn_open_folder.clicked.connect(self.abrir_carpeta_mods)
         
-        btn_browser = QPushButton("🌐")
-        btn_browser.setFixedWidth(35)
+        btn_browser = QPushButton("Browser")
+        btn_browser.setFixedSize(70, 28)
         btn_browser.setStyleSheet(toolbar_btn_style)
         btn_browser.setToolTip("Open Browser")
         btn_browser.clicked.connect(self.show_browser_window)
@@ -745,25 +648,17 @@ class PyIsaacLauncher(QMainWindow):
         center_layout.setContentsMargins(10, 10, 10, 10)
         
         self.lbl_info_titulo = QLabel("Select a mod")
-        self.lbl_info_titulo.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
+        self.lbl_info_titulo.setStyleSheet("font-weight: bold; color: #ffffff;")
+        self.lbl_info_titulo.setAlignment(Qt.AlignmentFlag.AlignTop)
         center_layout.addWidget(self.lbl_info_titulo)
         
-        self.lbl_info_buscar = QLabel("")
-        self.lbl_info_buscar.setStyleSheet("color: #aaaaaa; font-size: 12px;")
-        center_layout.addWidget(self.lbl_info_buscar)
-        
-        scroll_desc = QScrollArea()
-        scroll_desc.setStyleSheet("border: none;")
-        scroll_desc.setWidgetResizable(True)
         self.lbl_info_desc = QLabel("")
         self.lbl_info_desc.setStyleSheet("color: #cccccc;")
         self.lbl_info_desc.setWordWrap(True)
-        scroll_desc.setWidget(self.lbl_info_desc)
-        center_layout.addWidget(scroll_desc, 1)
+        self.lbl_info_desc.setAlignment(Qt.AlignmentFlag.AlignTop)
+        center_layout.addWidget(self.lbl_info_desc)
         
-        self.lbl_info_autor = QLabel("")
-        self.lbl_info_autor.setStyleSheet("color: #888888; font-size: 12px;")
-        center_layout.addWidget(self.lbl_info_autor)
+        center_layout.addStretch()
         
         layout.addWidget(center_panel, 1)
         
@@ -771,10 +666,6 @@ class PyIsaacLauncher(QMainWindow):
         right_panel.setStyleSheet("background-color: #1e1e1e;")
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(10, 10, 10, 10)
-        
-        self.lbl_images_title = QLabel("Images")
-        self.lbl_images_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;")
-        right_layout.addWidget(self.lbl_images_title)
         
         self.scroll_images = QScrollArea()
         self.scroll_images.setStyleSheet("border: none;")
@@ -790,31 +681,129 @@ class PyIsaacLauncher(QMainWindow):
         
         self.actualizar_lista_mods()
     
+    def show_settings_dialog(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Settings")
+        dialog.setFixedSize(520, 180)
+        dialog.setStyleSheet("background-color: #1e1e1e;")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        
+        input_style = """
+            QLineEdit {
+                background-color: #252525;
+                color: #ffffff;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                padding: 5px 8px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #1f538d;
+            }
+        """
+        browse_style = """
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """
+        save_style = """
+            QPushButton {
+                background-color: #1f538d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2a6fbd;
+            }
+        """
+        
+        mods_row = QHBoxLayout()
+        mods_label = QLabel("Mods path:")
+        mods_label.setFixedWidth(100)
+        mods_label.setStyleSheet("color: #aaaaaa; font-weight: bold;")
+        entry_mods = QLineEdit(self.entry_mods.text())
+        entry_mods.setStyleSheet(input_style)
+        btn_browse_mods = QPushButton("...")
+        btn_browse_mods.setFixedSize(70, 28)
+        btn_browse_mods.setStyleSheet(browse_style)
+        
+        def browse_mods():
+            path = QFileDialog.getExistingDirectory(dialog, "Select Mods Folder")
+            if path:
+                entry_mods.setText(path)
+        btn_browse_mods.clicked.connect(browse_mods)
+        
+        mods_row.addWidget(mods_label)
+        mods_row.addWidget(entry_mods, 1)
+        mods_row.addWidget(btn_browse_mods)
+        layout.addLayout(mods_row)
+        
+        game_row = QHBoxLayout()
+        game_label = QLabel("Game exe:")
+        game_label.setFixedWidth(100)
+        game_label.setStyleSheet("color: #aaaaaa; font-weight: bold;")
+        entry_game = QLineEdit(self.entry_isaac.text())
+        entry_game.setStyleSheet(input_style)
+        btn_browse_game = QPushButton("...")
+        btn_browse_game.setFixedSize(70, 28)
+        btn_browse_game.setStyleSheet(browse_style)
+        
+        def browse_game():
+            path, _ = QFileDialog.getOpenFileName(dialog, "Select Game Executable", "", "Executable (*.exe)")
+            if path:
+                entry_game.setText(path)
+        btn_browse_game.clicked.connect(browse_game)
+        
+        game_row.addWidget(game_label)
+        game_row.addWidget(entry_game, 1)
+        game_row.addWidget(btn_browse_game)
+        layout.addLayout(game_row)
+        
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_save = QPushButton("Save")
+        btn_save.setFixedSize(70, 28)
+        btn_save.setStyleSheet(save_style)
+        
+        def save_settings():
+            self.entry_mods.setText(entry_mods.text())
+            self.entry_isaac.setText(entry_game.text())
+            self.guardar_config()
+            self.actualizar_lista_mods()
+            dialog.close()
+        btn_save.clicked.connect(save_settings)
+        btn_row.addWidget(btn_save)
+        layout.addLayout(btn_row)
+        
+        dialog.exec()
+    
     def show_about_dialog(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("About")
-        dialog.setFixedSize(360, 320)
+        dialog.setFixedSize(360, 200)
         dialog.setStyleSheet("background-color: #1e1e1e;")
         
         layout = QVBoxLayout(dialog)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(6)
         
-        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.svg")
-        if os.path.exists(logo_path):
-            logo_widget = QSvgWidget(logo_path)
-            logo_widget.setMinimumSize(80, 80)
-            logo_widget.setMaximumSize(100, 100)
-            logo_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            layout.addWidget(logo_widget)
-        
         title = QLabel("PyIsaac Launcher")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
         version = QLabel("Version 1.0")
-        version.setStyleSheet("color: #aaaaaa; font-size: 12px;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
         
@@ -823,26 +812,15 @@ class PyIsaacLauncher(QMainWindow):
         desc.setStyleSheet("color: #cccccc; margin: 6px 0px;")
         layout.addWidget(desc)
         
-        features_title = QLabel("Features:")
-        features_title.setStyleSheet("font-weight: bold; color: #ffffff; margin-top: 4px;")
-        layout.addWidget(features_title)
-        
-        features = [
-            "Integrated browser for mod sites",
-            "Automatic metadata from Steam",
-            "Easy mod installation",
-            "Modern dark UI"
-        ]
-        
-        for f in features:
-            lbl = QLabel(f"  {f}")
-            lbl.setStyleSheet("color: #aaaaaa; font-size: 12px;")
-            layout.addWidget(lbl)
+        github_label = QLabel('<a href="https://github.com/Crying7Prophet/IsaacLauncher">GitHub</a>')
+        github_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        github_label.setOpenExternalLinks(True)
+        layout.addWidget(github_label)
         
         layout.addStretch()
         
         btn_close = QPushButton("Close")
-        btn_close.setFixedWidth(80)
+        btn_close.setFixedSize(70, 28)
         btn_close.setStyleSheet("""
             QPushButton {
                 background-color: #3d3d3d;
@@ -952,9 +930,7 @@ class PyIsaacLauncher(QMainWindow):
         
         if not nombre:
             self.lbl_info_titulo.setText("Select a mod")
-            self.lbl_info_buscar.setText("")
             self.lbl_info_desc.setText("")
-            self.lbl_info_autor.setText("")
             
             for i in range(self.images_layout.count()):
                 widget = self.images_layout.itemAt(i).widget()
@@ -973,9 +949,7 @@ class PyIsaacLauncher(QMainWindow):
             return
         
         self.lbl_info_titulo.setText(nombre)
-        self.lbl_info_buscar.setText("Loading...")
-        self.lbl_info_desc.setText("")
-        self.lbl_info_autor.setText("")
+        self.lbl_info_desc.setText("Loading...")
         
         self.leer_metadata_local(nombre)
     
@@ -1029,15 +1003,19 @@ class PyIsaacLauncher(QMainWindow):
                 if ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]:
                     imagenes.append(os.path.join(mod_path, file))
         
-        self.lbl_info_titulo.setText(titulo)
+        self.lbl_info_titulo.setText("")
         
-        info_text = ""
-        if version:
-            info_text += f"Version: {version}"
-        if tags:
-            info_text += f" | Tags: {', '.join(tags)}"
-        self.lbl_info_buscar.setText(info_text or "No metadata")
-        self.lbl_info_desc.setText(descripcion)
+        html = f"<h3 style='color:#ffffff;'>{titulo}</h3>"
+        if version or tags:
+            meta_parts = []
+            if version:
+                meta_parts.append(f"Version: {version}")
+            if tags:
+                meta_parts.append(f"Tags: {', '.join(tags)}")
+            html += f"<p style='color:#aaaaaa;'>{' | '.join(meta_parts)}</p>"
+        if descripcion:
+            html += f"<p style='color:#cccccc;'>{descripcion}</p>"
+        self.lbl_info_desc.setText(html)
         
         for i in range(self.images_layout.count()):
             widget = self.images_layout.itemAt(i).widget()
