@@ -4,21 +4,22 @@ import json
 import subprocess
 import shutil
 import zipfile
-import requests
-import threading
 import re
 import tempfile
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QTabWidget, QFrame, QLabel, QPushButton, QLineEdit, QListWidget,
-    QScrollArea, QFileDialog, QMessageBox, QGridLayout, QSizePolicy, QDialog
+    QFrame, QLabel, QPushButton, QLineEdit, QListWidget,
+    QScrollArea, QFileDialog, QMessageBox, QGridLayout, QSizePolicy, QDialog,
+    QProgressBar, QMenu
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile
 from PyQt6.QtSvgWidgets import QSvgWidget
-from PyQt6.QtCore import QUrl, Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QIcon, QPixmap, QImage, QColor
+from PyQt6.QtCore import QUrl, Qt, QTimer
+from PyQt6.QtGui import QIcon, QPixmap, QImage, QColor, QAction
+
+from mod_downloader import abrir_skymods
 
 IS_LINUX = sys.platform.startswith("linux")
 
@@ -42,149 +43,18 @@ def cargar_config():
     with open(config_file, "r") as f:
         return json.load(f)
 
-class DescargaThread(QThread):
-    finished = pyqtSignal(str)
-    error = pyqtSignal(str)
-    progress = pyqtSignal(str)
-    
-    def __init__(self, mod_id, config):
-        super().__init__()
-        self.mod_id = mod_id
-        self.config = config
-    
-    def run(self):
-        try:
-            temp_dir = os.path.abspath("temp_downloads")
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            steamcmd_path = self.config.get("steamcmd_path", "steamcmd")
-            
-            comando = [
-                steamcmd_path,
-                "+force_install_dir", temp_dir,
-                "+login", "anonymous",
-                "+workshop_download_item", "250900", self.mod_id,
-                "+quit"
-            ]
-            
-            subprocess.run(comando, check=True, capture_output=True)
-            
-            origen = os.path.join(temp_dir, "steamapps", "workshop", "content", "250900", self.mod_id)
-            destino = os.path.join(self.config["isaac_mods_path"], f"workshop_{self.mod_id}")
-            
-            if os.path.exists(origen):
-                if os.path.exists(destino):
-                    shutil.rmtree(destino)
-                shutil.copytree(origen, destino)
-                self.finished.emit(f"Mod {self.mod_id} instalado con éxito!")
-            else:
-                self.error.emit("SteamCMD terminó pero no se encontraron los archivos.")
-        except Exception as e:
-            self.error.emit(f"Error: {e}")
 
-class SmodsThread(QThread):
-    finished = pyqtSignal(str)
-    error = pyqtSignal(str)
-    progress = pyqtSignal(str)
+class BrowserView(QWebEngineView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._previous_url = None
+        self._pending_popup = False
     
-    def __init__(self, url_or_id, config):
-        super().__init__()
-        self.url_or_id = url_or_id
-        self.config = config
-    
-    def run(self):
-        try:
-            url_or_id = self.url_or_id.strip()
-            
-            if "catalogue.smods.ru/archives/" in url_or_id:
-                url = url_or_id
-            elif url_or_id.isdigit():
-                url = f"https://catalogue.smods.ru/archives/{url_or_id}"
-            else:
-                self.error.emit("URL inválida")
-                return
-            
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            download_match = re.search(r'href="(https?://[^"]+\.zip[^"]*)"', response.text)
-            if not download_match:
-                download_match = re.search(r'class="skymods-excerpt-btn"[^>]*href="([^"]+)"', response.text)
-            
-            if not download_match:
-                self.error.emit("No se encontró enlace de descarga")
-                return
-            
-            download_url = download_match.group(1)
-            self.progress.emit("Descargando...")
-            
-            temp_dir = os.path.abspath("temp_downloads")
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            filepath = os.path.join(temp_dir, "mod.zip")
-            
-            response = requests.get(download_url, headers=headers, stream=True, timeout=120)
-            response.raise_for_status()
-            
-            with open(filepath, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            mods_path = self.config["isaac_mods_path"]
-            if not mods_path or not os.path.exists(mods_path):
-                try:
-                    os.makedirs(mods_path, exist_ok=True)
-                except (OSError, FileNotFoundError):
-                    self.error.emit(f"Mods folder not found: {mods_path}\nSet a valid path in the settings tab")
-                    return
-            
-            with tempfile.TemporaryDirectory() as temp_extract:
-                with zipfile.ZipFile(filepath, 'r') as zip_ref:
-                    zip_ref.extractall(temp_extract)
-                
-                contenido = os.listdir(temp_extract)
-                
-                if len(contenido) == 1 and os.path.isdir(os.path.join(temp_extract, contenido[0])):
-                    carpeta_extraida = os.path.join(temp_extract, contenido[0])
-                else:
-                    carpeta_extraida = temp_extract
-                
-                nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
-                
-                if nombre_oficial:
-                    destino = os.path.join(mods_path, nombre_oficial)
-                else:
-                    destino = os.path.join(mods_path, "mod_sin_nombre")
-                
-                if os.path.exists(destino):
-                    shutil.rmtree(destino)
-                shutil.copytree(carpeta_extraida, destino)
-            
-            os.remove(filepath)
-            self.finished.emit(f"Mod instalado en: {destino}")
-            
-        except Exception as e:
-            self.error.emit(f"Error: {e}")
-    
-    def buscar_nombre_en_metadata(self, folder):
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                if file in ["metadata.xml", "metadata.txt", "info.xml", "info.txt"]:
-                    filepath = os.path.join(root, file)
-                    try:
-                        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                            content = f.read()
-                        match = re.search(r'<name>([^<]+)</name>', content, re.IGNORECASE)
-                        if match:
-                            return match.group(1).strip()
-                        match = re.search(r'^Name\s*=\s*(.+)$', content, re.MULTILINE | re.IGNORECASE)
-                        if match:
-                            return match.group(1).strip()
-                    except:
-                        pass
-        return None
+    def createWindow(self, window_type):
+        self._previous_url = self.url()
+        self._pending_popup = True
+        return self
+
 
 class PyIsaacLauncher(QMainWindow):
     def __init__(self):
@@ -200,7 +70,7 @@ class PyIsaacLauncher(QMainWindow):
         self.browser = None
         self.lbl_zoom = None
         
-        self.setWindowTitle("PyIsaac Launcher v1.0")
+        self.setWindowTitle("PyIsaac Launcher")
         self.setGeometry(100, 100, 1100, 650)
         
         app = QApplication.instance()
@@ -318,7 +188,8 @@ class PyIsaacLauncher(QMainWindow):
                 exe_dir = os.path.dirname(isaac_exe)
                 subprocess.Popen(["wine", os.path.basename(isaac_exe)], cwd=exe_dir)
             else:
-                subprocess.Popen([isaac_exe])
+                exe_dir = os.path.dirname(isaac_exe)
+                subprocess.Popen([isaac_exe], cwd=exe_dir)
         else:
             QMessageBox.warning(self, "Error", "Game executable not found.")
     
@@ -381,20 +252,6 @@ class PyIsaacLauncher(QMainWindow):
             }
             QPushButton:hover {
                 background-color: #2a6fbd;
-            }
-        """
-        
-        smods_btn_style = """
-            QPushButton {
-                background-color: #2d5a27;
-                color: #ffffff;
-                border: none;
-                border-radius: 3px;
-                padding: 3px 8px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #3d7a37;
             }
         """
         
@@ -466,22 +323,6 @@ class PyIsaacLauncher(QMainWindow):
         row2 = QHBoxLayout()
         row2.setSpacing(4)
         
-        self.mod_id_entry = QLineEdit()
-        self.mod_id_entry.setPlaceholderText("Steam ID")
-        self.mod_id_entry.setFixedWidth(100)
-        self.mod_id_entry.setStyleSheet(input_style)
-        
-        self.btn_download = QPushButton("Download")
-        self.btn_download.setFixedSize(70, 28)
-        self.btn_download.setToolTip("Download by Steam ID")
-        self.btn_download.setStyleSheet(primary_btn_style)
-        self.btn_download.clicked.connect(self.descargar_por_id)
-        
-        self.btn_smods = QPushButton("Smods")
-        self.btn_smods.setFixedSize(70, 28)
-        self.btn_smods.setStyleSheet(smods_btn_style)
-        self.btn_smods.clicked.connect(self.descargar_desde_smods)
-        
         shortcuts = [
             ("Workshop", "https://steamcommunity.com/app/250900/workshop/"),
             ("Smods", "https://catalogue.smods.ru/?app=250900"),
@@ -489,10 +330,6 @@ class PyIsaacLauncher(QMainWindow):
             ("ModDB", "https://www.moddb.com/games/the-binding-of-isaac-rebirth"),
             ("ModIO", "https://moddingofisaac.com/"),
         ]
-        
-        row2.addWidget(self.mod_id_entry)
-        row2.addWidget(self.btn_download)
-        row2.addWidget(self.btn_smods)
         
         sep1 = QFrame()
         sep1.setFrameShape(QFrame.Shape.VLine)
@@ -513,21 +350,144 @@ class PyIsaacLauncher(QMainWindow):
         
         layout.addWidget(toolbar)
         
-        self.browser = QWebEngineView()
+        self.browser = BrowserView()
         
         settings = self.browser.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
         
-        self.browser.urlChanged.connect(self.on_url_changed)
-        
         layout.addWidget(self.browser)
+        
+        self.browser_status = QFrame()
+        self.browser_status.setStyleSheet("background-color: #252525; border-top: 1px solid #3d3d3d;")
+        status_layout = QHBoxLayout(self.browser_status)
+        status_layout.setContentsMargins(8, 2, 8, 2)
+        self.browser_status_label = QLabel("Ready")
+        self.browser_status_label.setStyleSheet("color: #888888;")
+        status_layout.addWidget(self.browser_status_label)
+        status_layout.addStretch()
+        layout.addWidget(self.browser_status)
+        
+        self.browser.urlChanged.connect(self.on_url_changed)
+        self.browser.urlChanged.connect(lambda: QTimer.singleShot(300, self.check_popup_navigation))
+        self.browser.loadStarted.connect(lambda: self.browser_status_label.setText("Loading..."))
+        self.browser.loadProgress.connect(lambda p: self.browser_status_label.setText(f"Loading... {p}%"))
+        self.browser.loadFinished.connect(lambda ok: self.browser_status_label.setText("Ready" if ok else "Failed to load"))
+        
+        QWebEngineProfile.defaultProfile().downloadRequested.connect(self.on_download_requested)
+        
         self.browser.load(QUrl("https://steamcommunity.com/app/250900/workshop/"))
         
         self.browser_window.show()
     
     def on_url_changed(self, url):
         self.url_entry.setText(url.toString())
+        self.browser_status_label.setText(f"Navigating to {url.host()}")
+    
+    def check_popup_navigation(self):
+        if not self.browser._pending_popup:
+            return
+        self.browser._pending_popup = False
+        
+        current_url = self.browser.url().toString()
+        previous_url = self.browser._previous_url.toString() if self.browser._previous_url else ""
+        
+        reply = QMessageBox.question(
+            self.browser_window,
+            "Popup detected",
+            f"A page tried to open a popup:\n\n{current_url}\n\nDo you want to stay on this page?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.No and previous_url:
+            self.browser.setUrl(QUrl(previous_url))
+    
+    def on_download_requested(self, download):
+        filename = download.suggestedFileName()
+        if not filename.lower().endswith('.zip'):
+            download.reject()
+            return
+        
+        total_bytes = download.totalBytes()
+        if total_bytes > 0:
+            size_mb = total_bytes / (1024 * 1024)
+            size_str = f"{size_mb:.1f} MB"
+        else:
+            size_str = "Unknown size"
+        
+        reply = QMessageBox.question(
+            self.browser_window,
+            "Download file",
+            f"Do you want to download this file?\n\nName: {filename}\nSize: {size_str}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        
+        if reply == QMessageBox.StandardButton.No:
+            download.reject()
+            return
+        
+        temp_dir = os.path.abspath("temp_downloads")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        download.setDownloadDirectory(temp_dir)
+        download.setDownloadFileName(filename)
+        download.accept()
+        
+        self.browser_status_label.setText(f"Downloading: {filename}")
+        
+        download.finished.connect(lambda: self.procesar_zip_descargado(
+            os.path.join(temp_dir, filename)
+        ))
+    
+    def procesar_zip_descargado(self, filepath, silent=False):
+        mods_path = self.entry_mods.text() if self.entry_mods else self.config.get("isaac_mods_path", "")
+        if not mods_path or not os.path.exists(mods_path):
+            try:
+                os.makedirs(mods_path, exist_ok=True)
+            except (OSError, FileNotFoundError):
+                if not silent and hasattr(self, "browser_status_label"):
+                    self.browser_status_label.setText("Ready")
+                if not silent:
+                    QMessageBox.warning(self, "Error", f"Mods folder not found: {mods_path}\nSet a valid path in the settings tab")
+                    return
+                raise
+        
+        if not os.path.exists(filepath):
+            if not silent and hasattr(self, "browser_status_label"):
+                self.browser_status_label.setText("Ready")
+            return
+        
+        with tempfile.TemporaryDirectory() as temp_extract:
+            with zipfile.ZipFile(filepath, 'r') as zip_ref:
+                zip_ref.extractall(temp_extract)
+            
+            contenido = os.listdir(temp_extract)
+            
+            if len(contenido) == 1 and os.path.isdir(os.path.join(temp_extract, contenido[0])):
+                carpeta_extraida = os.path.join(temp_extract, contenido[0])
+            else:
+                carpeta_extraida = temp_extract
+            
+            nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
+            
+            if nombre_oficial:
+                destino = os.path.join(mods_path, self.sanitizar_nombre(nombre_oficial))
+            else:
+                nombre_base = os.path.splitext(os.path.basename(filepath))[0]
+                destino = os.path.join(mods_path, nombre_base)
+            
+            if os.path.exists(destino):
+                shutil.rmtree(destino)
+            shutil.copytree(carpeta_extraida, destino)
+        
+        os.remove(filepath)
+        if not silent and hasattr(self, "browser_status_label"):
+            self.browser_status_label.setText("Ready")
+        if not silent:
+            self.actualizar_lista_mods()
+            QMessageBox.information(self, "Success", f"Mod installed: {os.path.basename(destino)}")
     
     def setup_mods_tab(self):
         layout = QHBoxLayout(self.mods_content)
@@ -606,17 +566,29 @@ class PyIsaacLauncher(QMainWindow):
         """)
         btn_open_folder.clicked.connect(self.abrir_carpeta_mods)
         
-        btn_browser = QPushButton("Browser")
-        btn_browser.setFixedSize(70, 28)
-        btn_browser.setStyleSheet(toolbar_btn_style)
-        btn_browser.setToolTip("Open Browser")
-        btn_browser.clicked.connect(self.show_browser_window)
+        btn_download = QPushButton("Download")
+        btn_download.setFixedSize(80, 28)
+        btn_download.setStyleSheet("""
+            QPushButton {
+                background-color: #1f538d;
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2a6fbd;
+            }
+        """)
+        
+        btn_download.clicked.connect(lambda: abrir_skymods(self, self.browser, self.entry_mods.text()))
         
         toolbar_layout.addWidget(btn_refresh)
         toolbar_layout.addWidget(btn_add)
         toolbar_layout.addWidget(btn_delete)
         toolbar_layout.addWidget(btn_open_folder)
-        toolbar_layout.addWidget(btn_browser)
+        toolbar_layout.addWidget(btn_download)
         toolbar_layout.addStretch()
         
         left_layout.addWidget(toolbar)
@@ -872,8 +844,8 @@ class PyIsaacLauncher(QMainWindow):
         for item in sorted(items):
             item_path = os.path.join(mods_path, item)
             if os.path.isdir(item_path):
-                self.lista_mods.addItem(item)
                 self.mods_list.append(item)
+                self.lista_mods.addItem(item)
         
         if self.mods_list:
             self.lista_mods.setCurrentRow(0)
@@ -903,7 +875,7 @@ class PyIsaacLauncher(QMainWindow):
                         nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
                         
                         if nombre_oficial:
-                            destino = os.path.join(mods_path, nombre_oficial)
+                            destino = os.path.join(mods_path, self.sanitizar_nombre(nombre_oficial))
                         else:
                             nombre_base = os.path.splitext(item)[0]
                             destino = os.path.join(mods_path, nombre_base)
@@ -1059,7 +1031,6 @@ class PyIsaacLauncher(QMainWindow):
         
         if reply == QMessageBox.StandardButton.Yes and os.path.exists(mod_path):
             shutil.rmtree(mod_path)
-            print(f"Mod eliminado: {self.mod_seleccionado}")
             self.mod_seleccionado = None
             self.actualizar_lista_mods()
     
@@ -1107,97 +1078,130 @@ class PyIsaacLauncher(QMainWindow):
         if self.browser:
             self.browser.setUrl(QUrl(url))
     
-    def descargar_por_id(self):
-        mod_id = self.mod_id_entry.text().strip()
-        if not mod_id:
-            QMessageBox.warning(self, "Error", "Enter a mod ID")
-            return
-        
-        if not mod_id.isdigit():
-            QMessageBox.warning(self, "Error", "ID must be numbers only")
-            return
-        
-        self.btn_download.setEnabled(False)
-        self.btn_download.setText("Downloading...")
-        
-        self.descarga_thread = DescargaThread(mod_id, self.config)
-        self.descarga_thread.progress.connect(lambda m: self.btn_download.setText(m))
-        self.descarga_thread.finished.connect(lambda m: self.on_descarga_finished(m, True))
-        self.descarga_thread.error.connect(lambda m: self.on_descarga_finished(m, False))
-        self.descarga_thread.start()
-    
-    def descargar_desde_smods(self):
-        url_or_id = self.mod_id_entry.text().strip()
-        
-        if not url_or_id:
-            QMessageBox.warning(self, "Error", "Enter a Smods URL or mod ID")
-            return
-        
-        self.btn_smods.setEnabled(False)
-        self.btn_smods.setText("Searching...")
-        
-        self.smods_thread = SmodsThread(url_or_id, self.config)
-        self.smods_thread.progress.connect(lambda m: self.btn_smods.setText(m))
-        self.smods_thread.finished.connect(lambda m: self.on_descarga_finished(m, True))
-        self.smods_thread.error.connect(lambda m: self.on_descarga_finished(m, False))
-        self.smods_thread.start()
-    
-    def on_descarga_finished(self, message, success):
-        self.btn_download.setEnabled(True)
-        self.btn_download.setText("Download")
-        self.btn_smods.setEnabled(True)
-        self.btn_smods.setText("From Smods")
-        
-        if success:
-            QMessageBox.information(self, "Success", message)
-            self.actualizar_lista_mods()
-        else:
-            QMessageBox.warning(self, "Error", message)
-    
     def seleccionar_archivo(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, "Select downloaded file", "", "ZIP files (*.zip);;All files (*.*)")
+        filepaths, _ = QFileDialog.getOpenFileNames(self, "Select mod files", "", "ZIP files (*.zip);;All files (*.*)")
         
-        if filepath:
-            mods_path = self.entry_mods.text()
-            try:
-                os.makedirs(mods_path, exist_ok=True)
-            except (OSError, FileNotFoundError):
-                QMessageBox.warning(self, "Error", f"Mods folder not found: {mods_path}\nSet a valid path in the settings tab")
-                return
+        if not filepaths:
+            return
+        
+        zip_files = [f for f in filepaths if f.endswith(".zip")]
+        non_zip = [f for f in filepaths if not f.endswith(".zip")]
+        
+        if non_zip:
+            names = ", ".join(os.path.basename(f) for f in non_zip[:3])
+            if len(non_zip) > 3:
+                names += f" and {len(non_zip) - 3} more"
+            QMessageBox.warning(self, "Skipped files", f"The following files are not ZIP and were skipped:\n{names}")
+        
+        if not zip_files:
+            QMessageBox.warning(self, "Error", "No valid ZIP files selected")
+            return
+        
+        mods_path = self.entry_mods.text()
+        try:
+            os.makedirs(mods_path, exist_ok=True)
+        except (OSError, FileNotFoundError):
+            QMessageBox.warning(self, "Error", f"Mods folder not found: {mods_path}\nSet a valid path in the settings tab")
+            return
+        
+        total = len(zip_files)
+        progress_dialog = QDialog(self)
+        progress_dialog.setWindowTitle("Installing mods")
+        progress_dialog.setFixedSize(420, 120)
+        progress_dialog.setStyleSheet("background-color: #1e1e1e;")
+        progress_dialog.setWindowFlags(progress_dialog.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        
+        progress_layout = QVBoxLayout(progress_dialog)
+        progress_layout.setContentsMargins(16, 16, 16, 16)
+        progress_layout.setSpacing(10)
+        
+        lbl_status = QLabel(f"[1/{total}] Preparing...")
+        lbl_status.setStyleSheet("color: #ffffff; font-weight: bold;")
+        lbl_status.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        progress_layout.addWidget(lbl_status)
+        
+        progress_bar = QProgressBar()
+        progress_bar.setRange(0, total)
+        progress_bar.setValue(0)
+        progress_bar.setTextVisible(True)
+        progress_bar.setFormat("%v / %m")
+        progress_bar.setStyleSheet("""
+            QProgressBar {
+                background-color: #252525;
+                border: 1px solid #3d3d3d;
+                border-radius: 4px;
+                height: 20px;
+                text-align: center;
+                color: #ffffff;
+            }
+            QProgressBar::chunk {
+                background-color: #1f538d;
+                border-radius: 3px;
+            }
+        """)
+        progress_layout.addWidget(progress_bar)
+        
+        progress_dialog.show()
+        QApplication.processEvents()
+        
+        installed = []
+        failed = []
+        
+        for i, filepath in enumerate(zip_files):
+            filename = os.path.basename(filepath)
+            lbl_status.setText(f"[{i + 1}/{total}] Installing: {filename}")
+            progress_bar.setValue(i)
+            QApplication.processEvents()
             
             try:
-                if filepath.endswith(".zip"):
-                    with tempfile.TemporaryDirectory() as temp_dir:
-                        with zipfile.ZipFile(filepath, 'r') as zip_ref:
-                            zip_ref.extractall(temp_dir)
-                        
-                        contenido = os.listdir(temp_dir)
-                        
-                        if len(contenido) == 1 and os.path.isdir(os.path.join(temp_dir, contenido[0])):
-                            carpeta_extraida = os.path.join(temp_dir, contenido[0])
-                        else:
-                            carpeta_extraida = temp_dir
-                        
-                        nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
-                        
-                        if nombre_oficial:
-                            destino = os.path.join(mods_path, nombre_oficial)
-                        else:
-                            filename = os.path.basename(filepath)
-                            nombre_mod = os.path.splitext(filename)[0]
-                            destino = os.path.join(mods_path, nombre_mod)
-                        
-                        if os.path.exists(destino):
-                            shutil.rmtree(destino)
-                        
-                        shutil.copytree(carpeta_extraida, destino)
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    with zipfile.ZipFile(filepath, 'r') as zip_ref:
+                        zip_ref.extractall(temp_dir)
                     
-                    print(f"Mod instalado en: {destino}")
-                    self.actualizar_lista_mods()
-                else:
-                    QMessageBox.warning(self, "Error", "Unsupported file format")
+                    contenido = os.listdir(temp_dir)
+                    
+                    if len(contenido) == 1 and os.path.isdir(os.path.join(temp_dir, contenido[0])):
+                        carpeta_extraida = os.path.join(temp_dir, contenido[0])
+                    else:
+                        carpeta_extraida = temp_dir
+                    
+                    nombre_oficial = self.buscar_nombre_en_metadata(carpeta_extraida)
+                    
+                    if nombre_oficial:
+                        destino = os.path.join(mods_path, self.sanitizar_nombre(nombre_oficial))
+                    else:
+                        nombre_mod = os.path.splitext(filename)[0]
+                        destino = os.path.join(mods_path, nombre_mod)
+                    
+                    if os.path.exists(destino):
+                        shutil.rmtree(destino)
+                    
+                    shutil.copytree(carpeta_extraida, destino)
+                
+                installed.append(filename)
+                print(f"Mod instalado en: {destino}")
+            
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error installing mod: {e}")
+                failed.append(f"{filename}: {e}")
+                print(f"Error installing {filename}: {e}")
+        
+        progress_bar.setValue(total)
+        lbl_status.setText("Done!")
+        QApplication.processEvents()
+        progress_dialog.close()
+        
+        self.actualizar_lista_mods()
+        
+        if not failed:
+            QMessageBox.information(self, "Success", f"Successfully installed {len(installed)} mod(s)")
+        else:
+            failed_names = "\n".join(failed[:10])
+            if len(failed) > 10:
+                failed_names += f"\n...and {len(failed) - 10} more"
+            QMessageBox.warning(
+                self, "Import complete",
+                f"Installed: {len(installed)} mod(s)\nFailed: {len(failed)} mod(s)\n\n{failed_names}"
+            )
     
     def buscar_nombre_en_metadata(self, folder):
         for root, dirs, files in os.walk(folder):
@@ -1218,6 +1222,9 @@ class PyIsaacLauncher(QMainWindow):
                     except:
                         pass
         return None
+
+    def sanitizar_nombre(self, name):
+        return re.sub(r'[\\/:*?"<>|]', '_', name).strip()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

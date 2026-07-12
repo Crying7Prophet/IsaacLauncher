@@ -10,24 +10,23 @@
 
 </div>
 
----
-
-## About
-
 **PyIsaac Launcher** is a modern mod manager for *The Binding of Isaac: Repentance+* built in Python. It features an integrated browser for browsing mod sites directly within the app and provides seamless mod installation.
 
----
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| **Integrated Browser** | Navigate Steam Workshop, Smods, NexusMods, ModDB, and Modding of Isaac without leaving the app |
-| **Mod Management** | View installed mods with metadata and images from local files |
-| **Direct Downloads** | Download mods by Steam Workshop ID or Smods URL |
-| **Game Launcher** | Run the game directly from the app |
-| **Cross-Platform** | Works on Windows and Linux |
+- Integrated browser for Steam Workshop, Smods, NexusMods, ModDB, and Modding of Isaac
+- Mod management with local metadata and images
+- Direct mod downloads by Steam Workshop ID or Smods URL
+- Game launcher
 
+## Setup
+
+```bash
+git clone https://github.com/Crying7Prophet/IsaacLauncher.git
+cd IsaacLauncher
+python -m venv venv
+```
 ---
 
 ## Contributing
