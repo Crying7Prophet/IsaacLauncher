@@ -459,13 +459,13 @@ class DownloadProgressDialog(QDialog):
         self.btn_cancel.setFixedSize(80, 28)
         self.btn_cancel.setStyleSheet("""
             QPushButton {
-                background-color: #5a2d2d;
+                background-color: transparent;
                 color: #ffffff;
-                border: none;
+                border: 1px solid #5a2d2d;
                 border-radius: 4px;
                 padding: 5px 10px;
             }
-            QPushButton:hover { background-color: #7a3d3d; }
+            QPushButton:hover { background-color: #5a2d2d; border-color: #5a2d2d; }
         """)
         self.btn_cancel.clicked.connect(self._cancel)
         btn_layout.addWidget(self.btn_cancel)
@@ -597,15 +597,16 @@ class SkymodsDialog(QDialog):
         btn_search.setFixedSize(70, 30)
         btn_search.setStyleSheet("""
             QPushButton {
-                background-color: #1f538d;
+                background-color: transparent;
                 color: #ffffff;
-                border: none;
+                border: 1px solid #1f538d;
                 border-radius: 4px;
                 padding: 5px 10px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #2a6fbd;
+                background-color: #1f538d;
+                border-color: #1f538d;
             }
         """)
         btn_search.clicked.connect(self.buscar)
@@ -615,14 +616,15 @@ class SkymodsDialog(QDialog):
         btn_browser.setFixedSize(70, 30)
         btn_browser.setStyleSheet("""
             QPushButton {
-                background-color: #3d3d3d;
+                background-color: transparent;
                 color: #ffffff;
-                border: none;
+                border: 1px solid #555555;
                 border-radius: 4px;
                 padding: 5px 10px;
             }
             QPushButton:hover {
-                background-color: #4d4d4d;
+                background-color: #3d3d3d;
+                border-color: #3d3d3d;
             }
         """)
         btn_browser.clicked.connect(lambda: self.parent().show_browser_window())
@@ -670,14 +672,14 @@ class SkymodsDialog(QDialog):
         self.btn_prev.setFixedSize(70, 28)
         self.btn_prev.setStyleSheet("""
             QPushButton {
-                background-color: #3d3d3d;
+                background-color: transparent;
                 color: #ffffff;
-                border: none;
+                border: 1px solid #555555;
                 border-radius: 4px;
                 padding: 5px 10px;
             }
-            QPushButton:hover { background-color: #4d4d4d; }
-            QPushButton:disabled { color: #666666; }
+            QPushButton:hover { background-color: #3d3d3d; border-color: #3d3d3d; }
+            QPushButton:disabled { color: #555555; border-color: #333333; }
         """)
         self.btn_prev.clicked.connect(self.pagina_anterior)
         nav_layout.addWidget(self.btn_prev)
@@ -692,15 +694,15 @@ class SkymodsDialog(QDialog):
         self.btn_download_all.setEnabled(False)
         self.btn_download_all.setStyleSheet("""
             QPushButton {
-                background-color: #1f538d;
+                background-color: transparent;
                 color: #ffffff;
-                border: none;
+                border: 1px solid #1f538d;
                 border-radius: 4px;
                 padding: 5px 10px;
                 font-weight: bold;
             }
-            QPushButton:hover { background-color: #2a6fbd; }
-            QPushButton:disabled { background-color: #2a2a2a; color: #555555; }
+            QPushButton:hover { background-color: #1f538d; border-color: #1f538d; }
+            QPushButton:disabled { color: #555555; border-color: #333333; }
         """)
         self.btn_download_all.clicked.connect(self.start_queue_download)
         nav_layout.addWidget(self.btn_download_all)
@@ -709,14 +711,14 @@ class SkymodsDialog(QDialog):
         self.btn_next.setFixedSize(70, 28)
         self.btn_next.setStyleSheet("""
             QPushButton {
-                background-color: #3d3d3d;
+                background-color: transparent;
                 color: #ffffff;
-                border: none;
+                border: 1px solid #555555;
                 border-radius: 4px;
                 padding: 5px 10px;
             }
-            QPushButton:hover { background-color: #4d4d4d; }
-            QPushButton:disabled { color: #666666; }
+            QPushButton:hover { background-color: #3d3d3d; border-color: #3d3d3d; }
+            QPushButton:disabled { color: #555555; border-color: #333333; }
         """)
         self.btn_next.clicked.connect(self.pagina_siguiente)
         nav_layout.addWidget(self.btn_next)
@@ -833,8 +835,9 @@ class SkymodsDialog(QDialog):
             for cat in item.categories[:4]:
                 cat_label = QLabel(cat)
                 cat_label.setStyleSheet("""
-                    background-color: #1f538d;
+                    background-color: transparent;
                     color: #ffffff;
+                    border: 1px solid #1f538d;
                     border-radius: 3px;
                     padding: 1px 6px;
                     font-size: 10px;
@@ -855,29 +858,31 @@ class SkymodsDialog(QDialog):
             btn_download.setText("Queued")
             btn_download.setStyleSheet("""
                 QPushButton {
-                    background-color: #8b6914;
+                    background-color: transparent;
                     color: #ffffff;
-                    border: none;
+                    border: 1px solid #8b6914;
                     border-radius: 4px;
                     padding: 4px 10px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background-color: #a57d1a;
+                    background-color: #8b6914;
+                    border-color: #8b6914;
                 }
             """)
         else:
             btn_download.setStyleSheet("""
                 QPushButton {
-                    background-color: #2d5a27;
+                    background-color: transparent;
                     color: #ffffff;
-                    border: none;
+                    border: 1px solid #2d5a27;
                     border-radius: 4px;
                     padding: 4px 10px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background-color: #3d7a37;
+                    background-color: #2d5a27;
+                    border-color: #2d5a27;
                 }
             """)
         btn_download.clicked.connect(lambda checked, i=item, b=btn_download: self.toggle_queue(i, b))
@@ -941,28 +946,28 @@ class SkymodsDialog(QDialog):
             btn.setText("Download")
             btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #2d5a27;
+                    background-color: transparent;
                     color: #ffffff;
-                    border: none;
+                    border: 1px solid #2d5a27;
                     border-radius: 4px;
                     padding: 4px 10px;
                     font-weight: bold;
                 }
-                QPushButton:hover { background-color: #3d7a37; }
+                QPushButton:hover { background-color: #2d5a27; border-color: #2d5a27; }
             """)
         else:
             self.download_queue.append(item)
             btn.setText("Queued")
             btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #8b6914;
+                    background-color: transparent;
                     color: #ffffff;
-                    border: none;
+                    border: 1px solid #8b6914;
                     border-radius: 4px;
                     padding: 4px 10px;
                     font-weight: bold;
                 }
-                QPushButton:hover { background-color: #a57d1a; }
+                QPushButton:hover { background-color: #8b6914; border-color: #8b6914; }
             """)
         self._update_download_all_button()
 
@@ -978,27 +983,27 @@ class SkymodsDialog(QDialog):
                 btn.setText("Queued")
                 btn.setStyleSheet("""
                     QPushButton {
-                        background-color: #8b6914;
+                        background-color: transparent;
                         color: #ffffff;
-                        border: none;
+                        border: 1px solid #8b6914;
                         border-radius: 4px;
                         padding: 4px 10px;
                         font-weight: bold;
                     }
-                    QPushButton:hover { background-color: #a57d1a; }
+                    QPushButton:hover { background-color: #8b6914; border-color: #8b6914; }
                 """)
             else:
                 btn.setText("Download")
                 btn.setStyleSheet("""
                     QPushButton {
-                        background-color: #2d5a27;
+                        background-color: transparent;
                         color: #ffffff;
-                        border: none;
+                        border: 1px solid #2d5a27;
                         border-radius: 4px;
                         padding: 4px 10px;
                         font-weight: bold;
                     }
-                    QPushButton:hover { background-color: #3d7a37; }
+                    QPushButton:hover { background-color: #2d5a27; border-color: #2d5a27; }
                 """)
 
     def start_queue_download(self):
