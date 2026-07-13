@@ -1,5 +1,6 @@
 import re
 import os
+import shutil
 import tempfile
 import html as html_module
 import requests
@@ -534,6 +535,10 @@ class DownloadProgressDialog(QDialog):
         fail = len(self.failed)
         self.parent().actualizar_lista_mods()
 
+        temp_dir = os.path.join(os.getcwd(), "temp_downloads")
+        if os.path.isdir(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
         if self.cancelled:
             self.lbl_status.setText("Cancelled")
             self.lbl_detail.setText(f"Completed: {ok} | Failed: {fail} | Remaining: {total - ok - fail}")
@@ -1010,10 +1015,11 @@ class SkymodsDialog(QDialog):
         if not self.download_queue:
             return
         dialog = DownloadProgressDialog(self.parent(), self.download_queue)
+        dialog.start()
         dialog.exec()
         self.download_queue.clear()
-        self.card_buttons.clear()
         self._restore_queued_buttons()
+        self.card_buttons.clear()
         self._update_download_all_button()
 
 
