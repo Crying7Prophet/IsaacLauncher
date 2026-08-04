@@ -1,28 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import os
-import subprocess
-import platform
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(APP_DIR, "src")
-VENV_DIR = os.path.join(APP_DIR, "venv")
-
-
-def in_venv():
-    return hasattr(sys, 'base_prefix') and sys.prefix != sys.base_prefix
-
-
-def ensure_deps():
-    try:
-        import PyQt6
-        import requests
-    except ImportError:
-        if platform.system() == "Windows":
-            pip = os.path.join(VENV_DIR, "Scripts", "pip")
-        else:
-            pip = os.path.join(VENV_DIR, "bin", "pip")
-        subprocess.run([pip, "install", "-r", os.path.join(APP_DIR, "requirements.txt")], check=True)
 
 
 def main():
@@ -55,9 +36,4 @@ def main():
 
 
 if __name__ == "__main__":
-    if not in_venv():
-        subprocess.run([sys.executable, os.path.join(SRC_DIR, "setup.py")])
-        sys.exit(0)
-
-    ensure_deps()
     main()

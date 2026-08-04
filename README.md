@@ -20,13 +20,6 @@
 - Direct mod downloads by Steam Workshop ID or Smods URL
 - Game launcher
 
-## Setup
-
-```bash
-git clone https://github.com/Crying7Prophet/IsaacLauncher.git
-cd IsaacLauncher
-python -m venv venv
-```
 ---
 
 ## Contributing
