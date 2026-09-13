@@ -1,0 +1,10 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="icons/play.svg">assets/icons/play.svg</file>
+        <file alias="icons/trash.svg">assets/icons/trash.svg</file>
+        <file alias="icons/settings.svg">assets/icons/settings.svg</file>
+        <file alias="icons/info.svg">assets/icons/info.svg</file>
+        <file alias="icons/folder.svg">assets/icons/folder.svg</file>
+        <file alias="icons/plus-circle.svg">assets/icons/plus-circle.svg</file>
+    </qresource>
+</RCC>
